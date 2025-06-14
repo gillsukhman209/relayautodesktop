@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Amazon Relay Load Detector",
+  "version": "1.4",
+  "description": "Monitors the Amazon Relay load board for new loads and provides notifications.",
+  "permissions": ["storage", "notifications", "declarativeNetRequest"],
+  "host_permissions": ["*://relay.amazon.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://relay.amazon.com/loadboard/search*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["ding.wav", "cash.mp3"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
