@@ -1,11 +1,16 @@
 console.log("📦 content.js loaded");
 console.log("✅ content.js is running");
 
+// ExtPay Integration
+const extpay = ExtPay("relay-ai-booker");
+
 let isDetectionActive = false;
 let detectionTimeout;
 let baseDelay = 800;
 let randomDelay = 500;
 let globallySeenNewLoads = new Set(); // To prevent re-detecting the same new loads
+let isPaidUser = false;
+let userPaymentStatus = null;
 
 const SETTINGS_KEY = "amazonRelayLoadDetectorSettings";
 let currentSettings = {};
@@ -60,11 +65,363 @@ function injectModernStyles() {
   // but it should be empty.
 }
 
+// Payment Status Check Function
+async function checkPaymentStatus() {
+  try {
+    const user = await extpay.getUser();
+    isPaidUser = user.paid && user.subscriptionStatus === "active";
+    userPaymentStatus = user.subscriptionStatus;
+    console.log(
+      "💳 Payment Status:",
+      isPaidUser ? "PAID" : "UNPAID",
+      `(${userPaymentStatus})`
+    );
+
+    // Store user data for subscription display in settings
+    if (isPaidUser) {
+      window.currentUserData = user;
+    }
+
+    return isPaidUser;
+  } catch (error) {
+    console.error("❌ ExtPay Error:", error);
+    isPaidUser = false;
+    return false;
+  }
+}
+
+// Update Subscription Status Display
+function updateSubscriptionDisplay(user) {
+  const statusElement = document.getElementById("arl-sub-status");
+  const billingElement = document.getElementById("arl-sub-billing");
+
+  if (!statusElement || !billingElement) return;
+
+  // Update subscription status
+  statusElement.className = "arl-sub-value";
+  if (user.subscriptionStatus === "active") {
+    statusElement.textContent = "Active";
+    statusElement.classList.add("active");
+  } else if (user.subscriptionStatus === "past_due") {
+    statusElement.textContent = "Past Due";
+    statusElement.classList.add("warning");
+  } else if (user.subscriptionStatus === "canceled") {
+    statusElement.textContent = "Canceled";
+    statusElement.classList.add("error");
+  } else {
+    statusElement.textContent = user.subscriptionStatus || "Unknown";
+  }
+
+  // Update next billing date
+  if (user.subscriptionCancelAt) {
+    const cancelDate = new Date(user.subscriptionCancelAt);
+    billingElement.textContent = `Ends ${cancelDate.toLocaleDateString()}`;
+    billingElement.className = "arl-sub-value warning";
+  } else if (user.subscriptionStatus === "active") {
+    // Calculate next billing (ExtPay doesn't provide this directly, so we estimate)
+    const paidDate = new Date(user.paidAt);
+    const nextBilling = new Date(paidDate);
+    nextBilling.setMonth(paidDate.getMonth() + 1);
+    billingElement.textContent = nextBilling.toLocaleDateString();
+    billingElement.className = "arl-sub-value";
+  } else {
+    billingElement.textContent = "N/A";
+    billingElement.className = "arl-sub-value";
+  }
+}
+
+// Payment Required UI
+function setupPaymentUI() {
+  const paymentHTML = `
+    <div id="amazon-relay-detector-payment-panel">
+      <div class="arl-payment-hero">
+        <div class="arl-payment-icon">🚛</div>
+        <h2 class="arl-payment-title">Relay AI Booker Pro</h2>
+        <p class="arl-payment-subtitle">Professional Load Detection System</p>
+      </div>
+      
+      <div class="arl-value-grid">
+        <div class="arl-value-item">
+          <div class="arl-value-icon">⚡</div>
+          <div class="arl-value-text">
+            <h4>Instant Detection</h4>
+            <p>Catch new loads within seconds</p>
+          </div>
+        </div>
+        <div class="arl-value-item">
+          <div class="arl-value-icon">💰</div>
+          <div class="arl-value-text">
+            <h4>ROI Calculator</h4>
+            <p>See profit margins instantly</p>
+          </div>
+        </div>
+        <div class="arl-value-item">
+          <div class="arl-value-icon">🎯</div>
+          <div class="arl-value-text">
+            <h4>Smart Filtering</h4>
+            <p>Blacklist unwanted routes</p>
+          </div>
+        </div>
+        <div class="arl-value-item">
+          <div class="arl-value-icon">🤖</div>
+          <div class="arl-value-text">
+            <h4>Auto Booking</h4>
+            <p>One-click load booking</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="arl-pricing-section">
+        <div class="arl-price-tag">
+          <div class="arl-price-main">$50<span class="arl-price-period">/month</span></div>
+          <div class="arl-price-subtitle">Professional License</div>
+        </div>
+        <div class="arl-roi-note">
+          <span class="arl-roi-icon">📈</span>
+          <span>Typically pays for itself with just 1-2 loads caught per month</span>
+        </div>
+      </div>
+
+      <button id="arl-upgrade-btn" class="arl-upgrade-button">
+        <span class="arl-upgrade-text">Upgrade to Pro</span>
+        <span class="arl-upgrade-arrow">→</span>
+      </button>
+
+      <div class="arl-payment-footer">
+        <p>✓ Secure payment via Stripe</p>
+        <p>✓ Cancel anytime</p>
+        <p>✓ Works across all browsers</p>
+      </div>
+    </div>
+  `;
+
+  const paymentStyles = `
+    #amazon-relay-detector-payment-panel {
+      position: relative;
+      margin-top: 12px;
+      z-index: 999999;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+      color: #ffffff;
+      border: 1px solid #00d4ff;
+      border-radius: 16px;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      box-shadow: 
+        0 0 30px rgba(0, 212, 255, 0.3),
+        0 10px 50px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      min-width: 300px;
+      max-width: 400px;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    #amazon-relay-detector-payment-panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #00d4ff, #0066ff, #00d4ff);
+      animation: arl-border-glow 2s ease-in-out infinite;
+    }
+
+    @keyframes arl-border-glow {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
+    }
+
+    .arl-payment-hero {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .arl-payment-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.5));
+    }
+
+    .arl-payment-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px 0;
+      background: linear-gradient(135deg, #00d4ff, #0066ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .arl-payment-subtitle {
+      font-size: 14px;
+      color: #a0a0a0;
+      margin: 0;
+    }
+
+    .arl-value-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .arl-value-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .arl-value-item:hover {
+      border-color: rgba(0, 212, 255, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .arl-value-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .arl-value-text h4 {
+      margin: 0 0 4px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .arl-value-text p {
+      margin: 0;
+      font-size: 11px;
+      color: #a0a0a0;
+      line-height: 1.3;
+    }
+
+    .arl-pricing-section {
+      text-align: center;
+      margin: 24px 0;
+      padding: 20px;
+      background: rgba(0, 212, 255, 0.1);
+      border-radius: 12px;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+
+    .arl-price-tag {
+      margin-bottom: 12px;
+    }
+
+    .arl-price-main {
+      font-size: 36px;
+      font-weight: 800;
+      color: #00d4ff;
+      line-height: 1;
+    }
+
+    .arl-price-period {
+      font-size: 18px;
+      font-weight: 400;
+      color: #a0a0a0;
+    }
+
+    .arl-price-subtitle {
+      font-size: 14px;
+      color: #ffffff;
+      margin-top: 4px;
+    }
+
+    .arl-roi-note {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #a0a0a0;
+      font-style: italic;
+    }
+
+    .arl-roi-icon {
+      font-size: 14px;
+    }
+
+    .arl-upgrade-button {
+      width: 100%;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, #00d4ff 0%, #0066ff 100%);
+      border: none;
+      border-radius: 12px;
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      transition: all 0.3s ease;
+      box-shadow: 
+        0 4px 15px rgba(0, 212, 255, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      margin-bottom: 20px;
+    }
+
+    .arl-upgrade-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        0 6px 20px rgba(0, 212, 255, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .arl-upgrade-button:active {
+      transform: translateY(0);
+    }
+
+    .arl-upgrade-arrow {
+      font-size: 20px;
+      transition: transform 0.3s ease;
+    }
+
+    .arl-upgrade-button:hover .arl-upgrade-arrow {
+      transform: translateX(4px);
+    }
+
+    .arl-payment-footer {
+      text-align: center;
+    }
+
+    .arl-payment-footer p {
+      margin: 4px 0;
+      font-size: 12px;
+      color: #a0a0a0;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 500px) {
+      #amazon-relay-detector-payment-panel {
+        min-width: 280px;
+        max-width: 350px;
+        padding: 20px;
+      }
+      
+      .arl-value-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+    }
+  `;
+
+  return { paymentHTML, paymentStyles };
+}
+
 function setupUI() {
   const controlPanelHTML = `
     <div id="amazon-relay-detector-panel">
       <div class="arl-header">
-        <span class="arl-title">Load Detector</span>
+        <span class="arl-title">Relay AI Booker</span>
         <div class="arl-header-controls">
           <div id="arl-status-container">
             <div id="arl-status-indicator"></div>
@@ -91,10 +448,10 @@ function setupUI() {
 
       <div id="arl-settings-panel" style="display: none;">
         <h4 class="arl-settings-title">Settings</h4>
-        <div class="arl-setting">
-          <label for="arl-autobooker-toggle">Autobooker</label>
-          <label class="arl-toggle-switch">
-            <input type="checkbox" id="arl-autobooker-toggle">
+        <div class="arl-setting arl-setting-disabled">
+          <label for="arl-autobooker-toggle">Autobooker <span class="arl-coming-soon">Coming Soon</span></label>
+          <label class="arl-toggle-switch arl-toggle-disabled">
+            <input type="checkbox" id="arl-autobooker-toggle" disabled>
             <span class="arl-toggle-slider"></span>
           </label>
         </div>
@@ -130,6 +487,29 @@ function setupUI() {
            <label for="arl-blacklist-input">Keywords (comma-separated city/code)</label>
           <textarea id="arl-blacklist-input" class="arl-textarea-input" placeholder="e.g., SCK1, Fremont, DFO3"></textarea>
         </div>
+        
+        <h4 class="arl-settings-title" style="margin-top: 20px; border-top: 1px solid var(--arl-border); padding-top: 15px;">Subscription</h4>
+        
+        <div id="arl-subscription-status" class="arl-subscription-status">
+          <div class="arl-sub-info">
+            <span class="arl-sub-label">Status:</span>
+            <span id="arl-sub-status" class="arl-sub-value">Loading...</span>
+          </div>
+          <div class="arl-sub-info">
+            <span class="arl-sub-label">Plan:</span>
+            <span class="arl-sub-plan">$50/month</span>
+          </div>
+          <div class="arl-sub-info">
+            <span class="arl-sub-label">Next billing:</span>
+            <span id="arl-sub-billing" class="arl-sub-value">Loading...</span>
+          </div>
+        </div>
+        
+        <div class="arl-setting-full-width">
+          <button id="arl-manage-subscription-btn" class="arl-manage-sub-btn">
+            Manage Subscription
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -149,19 +529,39 @@ function setupUI() {
       position: relative;
       margin-top: 12px;
       z-index: 999999;
-      background-color: var(--arl-bg);
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
       color: var(--arl-text);
-      border: 1px solid var(--arl-border);
-      border-radius: 12px;
-      padding: 16px;
+      border: 1px solid #00d4ff;
+      border-radius: 16px;
+      padding: 20px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-      min-width: 240px;
-      max-width: 350px;
+      box-shadow: 
+        0 0 30px rgba(0, 212, 255, 0.3),
+        0 10px 50px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      min-width: 280px;
+      max-width: 400px;
       width: 100%;
       box-sizing: border-box;
       flex-shrink: 0;
       overflow: visible;
+    }
+
+    #amazon-relay-detector-panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #00d4ff, #0066ff, #00d4ff);
+      border-radius: 16px 16px 0 0;
+      animation: arl-border-glow 2s ease-in-out infinite;
+    }
+
+    @keyframes arl-border-glow {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
     }
     
     /* Responsive adjustments for smaller screens */
@@ -180,42 +580,142 @@ function setupUI() {
         padding: 10px;
       }
     }
-    .arl-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    .arl-title { font-size: 16px; font-weight: 600; }
-    .arl-header-controls { display: flex; align-items: center; gap: 10px; }
-    #arl-status-container { display: flex; align-items: center; background-color: var(--arl-bg-light); padding: 4px 8px; border-radius: 6px; }
-    #arl-status-indicator { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background-color: var(--arl-danger); transition: background-color 0.3s ease; }
-    #arl-status-text { font-size: 12px; font-weight: 500; color: var(--arl-text-muted); }
+    .arl-header { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      margin-bottom: 20px; 
+      position: relative;
+      z-index: 2;
+    }
+    .arl-title { 
+      font-size: 20px; 
+      font-weight: 700; 
+      background: linear-gradient(135deg, #00d4ff, #0066ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.3));
+    }
+    .arl-header-controls { display: flex; align-items: center; gap: 12px; }
+    #arl-status-container { 
+      display: flex; 
+      align-items: center; 
+      background: rgba(255, 255, 255, 0.05); 
+      padding: 6px 12px; 
+      border-radius: 8px; 
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      backdrop-filter: blur(10px);
+    }
+    #arl-status-indicator { 
+      width: 8px; 
+      height: 8px; 
+      border-radius: 50%; 
+      margin-right: 8px; 
+      background-color: var(--arl-danger); 
+      transition: all 0.3s ease;
+      box-shadow: 0 0 10px currentColor;
+    }
+    #arl-status-text { 
+      font-size: 12px; 
+      font-weight: 600; 
+      color: var(--arl-text); 
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+    }
     
-    .arl-slider-group { margin-bottom: 12px; }
-    .arl-slider-group label { font-size: 14px; color: var(--arl-text-muted); }
-    .arl-slider-value { color: var(--arl-text); font-weight: 500; }
+    .arl-slider-group { 
+      margin-bottom: 20px; 
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      border: 1px solid rgba(0, 212, 255, 0.15);
+    }
+    .arl-slider-group label { 
+      font-size: 14px; 
+      color: var(--arl-text); 
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .arl-slider-value { 
+      color: #00d4ff; 
+      font-weight: 700; 
+      text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+    }
     
     input[type="range"]#arl-base-speed, input[type="range"]#arl-randomizer {
       -webkit-appearance: none !important;
       appearance: none !important;
       width: 100% !important;
-      height: 6px !important;
-      background: var(--arl-bg-light) !important;
-      border-radius: 3px !important;
+      height: 8px !important;
+      background: linear-gradient(to right, #1a1a2e, #16213e) !important;
+      border-radius: 6px !important;
       outline: none !important;
-      margin-top: 8px !important;
+      border: 1px solid rgba(0, 212, 255, 0.3) !important;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3) !important;
     }
     input[type="range"]#arl-base-speed::-webkit-slider-thumb, input[type="range"]#arl-randomizer::-webkit-slider-thumb {
       -webkit-appearance: none !important;
       appearance: none !important;
-      width: 16px !important;
-      height: 16px !important;
-      background: var(--arl-primary) !important;
+      width: 20px !important;
+      height: 20px !important;
+      background: linear-gradient(135deg, #00d4ff, #0066ff) !important;
       cursor: pointer !important;
       border-radius: 50% !important;
+      border: 2px solid #ffffff !important;
+      box-shadow: 
+        0 0 15px rgba(0, 212, 255, 0.6),
+        0 2px 8px rgba(0, 0, 0, 0.3) !important;
+      transition: all 0.2s ease !important;
+    }
+    input[type="range"]#arl-base-speed::-webkit-slider-thumb:hover, input[type="range"]#arl-randomizer::-webkit-slider-thumb:hover {
+      transform: scale(1.1) !important;
+      box-shadow: 
+        0 0 20px rgba(0, 212, 255, 0.8),
+        0 4px 12px rgba(0, 0, 0, 0.4) !important;
     }
     
     .arl-button-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
-    .arl-btn { border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
-    .arl-btn-start { background-color: var(--arl-success); color: white; }
-    .arl-btn-stop { background-color: var(--arl-danger); color: white; }
-    .arl-btn:hover { opacity: 0.85; }
+    .arl-btn { 
+      border: none; 
+      padding: 14px 20px; 
+      border-radius: 12px; 
+      font-weight: 700; 
+      cursor: pointer; 
+      transition: all 0.3s ease; 
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    .arl-btn-start { 
+      background: linear-gradient(135deg, #00d4ff, #0066ff);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .arl-btn-stop { 
+      background: linear-gradient(135deg, #ff4757, #ff3742);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .arl-btn:hover { 
+      transform: translateY(-2px);
+      opacity: 1;
+    }
+    .arl-btn-start:hover {
+      box-shadow: 
+        0 0 25px rgba(0, 212, 255, 0.6),
+        0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+    .arl-btn-stop:hover {
+      box-shadow: 
+        0 0 25px rgba(255, 71, 87, 0.6),
+        0 8px 25px rgba(0, 0, 0, 0.3);
+    }
 
     .arl-btn:disabled {
       cursor: not-allowed;
@@ -223,21 +723,97 @@ function setupUI() {
     }
 
     .arl-btn-icon {
-      background: var(--arl-bg-light);
-      border: none;
-      color: var(--arl-text-muted);
-      width: 30px;
-      height: 30px;
-      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: #00d4ff;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 16px;
-      transition: background-color 0.2s;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     }
     .arl-btn-icon:hover {
-      background: var(--arl-border);
+      background: linear-gradient(135deg, #00d4ff, #0066ff);
+      color: white;
+      border-color: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+      box-shadow: 
+        0 0 20px rgba(0, 212, 255, 0.5),
+        0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    /* --- Subscription Status --- */
+    .arl-subscription-status {
+      background: rgba(0, 212, 255, 0.05);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 12px;
+    }
+
+    .arl-sub-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .arl-sub-info:last-child {
+      margin-bottom: 0;
+    }
+
+    .arl-sub-label {
+      color: var(--arl-text-muted);
+      font-weight: 500;
+    }
+
+    .arl-sub-value {
+      color: var(--arl-text);
+      font-weight: 600;
+    }
+
+    .arl-sub-value.active {
+      color: var(--arl-success);
+    }
+
+    .arl-sub-value.warning {
+      color: #ffa726;
+    }
+
+    .arl-sub-value.error {
+      color: var(--arl-danger);
+    }
+
+    .arl-sub-plan {
+      color: var(--arl-primary);
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .arl-manage-sub-btn {
+      width: 100%;
+      padding: 10px 16px;
+      background: linear-gradient(135deg, var(--arl-primary) 0%, #0056d3 100%);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-top: 8px;
+    }
+
+    .arl-manage-sub-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
     }
     
     /* --- Settings Panel --- */
@@ -269,6 +845,33 @@ function setupUI() {
     .arl-setting label {
       font-size: 14px;
       color: var(--arl-text);
+    }
+    
+    .arl-setting-disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    
+    .arl-coming-soon {
+      background: linear-gradient(135deg, #ff6b6b, #ffa726);
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 8px;
+      margin-left: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+    }
+    
+    .arl-toggle-disabled .arl-toggle-slider {
+      background-color: #333 !important;
+      cursor: not-allowed !important;
+    }
+    
+    .arl-toggle-disabled .arl-toggle-slider:before {
+      background-color: #666 !important;
     }
 
     /* Custom Toggle Switch */
@@ -466,45 +1069,77 @@ function setupUI() {
     }
   `;
 
-  function waitAndInjectPanel() {
+  async function waitAndInjectPanel() {
     let attempts = 0;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       attempts++;
       const searchPanel = document.querySelector(".search__panel");
       if (searchPanel) {
-        // First, inject styles if they don't exist
-        if (!document.getElementById("arl-styles")) {
-          const styleSheet = document.createElement("style");
-          styleSheet.id = "arl-styles";
-          styleSheet.innerText = styles;
-          document.head.appendChild(styleSheet);
-        }
+        // Check payment status first
+        const isPaid = await checkPaymentStatus();
 
-        // Then, inject the Priority Lane container if it doesn't exist
-        const loadListContainer = document.querySelector('[role="list"]');
-        if (
-          loadListContainer &&
-          !document.getElementById("arl-priority-lane")
-        ) {
-          const priorityLaneHTML = `
-            <div id="arl-priority-lane">
-              <h3 class="arl-priority-header">Newly Detected</h3>
-            </div>
-          `;
-          loadListContainer.insertAdjacentHTML("beforebegin", priorityLaneHTML);
-        }
+        if (isPaid) {
+          // User is paid - show normal UI
+          // First, inject styles if they don't exist
+          if (!document.getElementById("arl-styles")) {
+            const styleSheet = document.createElement("style");
+            styleSheet.id = "arl-styles";
+            styleSheet.innerText = styles;
+            document.head.appendChild(styleSheet);
+          }
 
-        // Then, inject the panel if it doesn't exist
-        if (!document.getElementById("amazon-relay-detector-panel")) {
-          searchPanel.insertAdjacentHTML("beforeend", controlPanelHTML);
-          applySettingsToUI();
-          attachListeners();
-          // Show profit calculations initially since monitoring is not active
-          setTimeout(() => {
-            if (!isDetectionActive) {
-              showProfitCalculation();
-            }
-          }, 500);
+          // Then, inject the Priority Lane container if it doesn't exist
+          const loadListContainer = document.querySelector('[role="list"]');
+          if (
+            loadListContainer &&
+            !document.getElementById("arl-priority-lane")
+          ) {
+            const priorityLaneHTML = `
+              <div id="arl-priority-lane">
+                <h3 class="arl-priority-header">Newly Detected</h3>
+              </div>
+            `;
+            loadListContainer.insertAdjacentHTML(
+              "beforebegin",
+              priorityLaneHTML
+            );
+          }
+
+          // Then, inject the panel if it doesn't exist
+          if (
+            !document.getElementById("amazon-relay-detector-panel") &&
+            !document.getElementById("amazon-relay-detector-payment-panel")
+          ) {
+            searchPanel.insertAdjacentHTML("beforeend", controlPanelHTML);
+            applySettingsToUI();
+            attachListeners();
+            // Show profit calculations initially since monitoring is not active
+            setTimeout(() => {
+              if (!isDetectionActive) {
+                showProfitCalculation();
+              }
+            }, 500);
+          }
+        } else {
+          // User is not paid - show payment UI
+          const { paymentHTML, paymentStyles } = setupPaymentUI();
+
+          // Inject payment styles if they don't exist
+          if (!document.getElementById("arl-payment-styles")) {
+            const styleSheet = document.createElement("style");
+            styleSheet.id = "arl-payment-styles";
+            styleSheet.innerText = paymentStyles;
+            document.head.appendChild(styleSheet);
+          }
+
+          // Inject payment panel if it doesn't exist
+          if (
+            !document.getElementById("amazon-relay-detector-payment-panel") &&
+            !document.getElementById("amazon-relay-detector-panel")
+          ) {
+            searchPanel.insertAdjacentHTML("beforeend", paymentHTML);
+            attachPaymentListeners();
+          }
         }
         clearInterval(interval);
       }
@@ -576,6 +1211,7 @@ function setupUI() {
     stopBtn.disabled = true;
 
     speedInput.addEventListener("input", () => {
+      if (!isPaidUser) return;
       baseDelay = parseInt(speedInput.value, 10);
       speedValue.textContent = `${baseDelay}ms`;
       currentSettings.baseDelay = baseDelay;
@@ -583,6 +1219,7 @@ function setupUI() {
     });
 
     randomInput.addEventListener("input", () => {
+      if (!isPaidUser) return;
       randomDelay = parseInt(randomInput.value, 10);
       randomValue.textContent = `${randomDelay}ms`;
       currentSettings.randomDelay = randomDelay;
@@ -590,6 +1227,10 @@ function setupUI() {
     });
 
     startBtn.addEventListener("click", () => {
+      if (!isPaidUser) {
+        console.log("🚫 Start blocked - payment required");
+        return;
+      }
       if (isDetectionActive) return;
       isDetectionActive = true;
       statusText.textContent = "Monitoring";
@@ -602,18 +1243,29 @@ function setupUI() {
     });
 
     stopBtn.addEventListener("click", () => {
+      if (!isPaidUser) {
+        console.log("🚫 Stop blocked - payment required");
+        return;
+      }
       stopMonitoring("Stopped ");
       // Show profit calculation when stop button is clicked
       showProfitCalculation();
     });
 
-    settingsBtn.addEventListener("click", () => {
+    settingsBtn.addEventListener("click", async () => {
       const isHidden = settingsPanel.style.display === "none";
       settingsPanel.style.display = isHidden ? "block" : "none";
+
+      // Refresh subscription status when opening settings
+      if (isHidden && isPaidUser) {
+        const user = await extpay.getUser();
+        updateSubscriptionDisplay(user);
+      }
     });
 
     // --- Listeners for saving settings ---
     minPriceInput.addEventListener("input", () => {
+      if (!isPaidUser) return;
       const value = parseFloat(minPriceInput.value);
       if (!isNaN(value)) {
         currentSettings.minPriceIncrease = value;
@@ -621,18 +1273,22 @@ function setupUI() {
       }
     });
 
-    autobookerToggle.addEventListener("change", () => {
-      currentSettings.autobooker = autobookerToggle.checked;
-      saveSettings(currentSettings);
-    });
+    // Autobooker is disabled - coming soon
+    // autobookerToggle.addEventListener("change", () => {
+    //   if (!isPaidUser) return;
+    //   currentSettings.autobooker = autobookerToggle.checked;
+    //   saveSettings(currentSettings);
+    // });
 
     fastbookToggle.addEventListener("change", () => {
+      if (!isPaidUser) return;
       currentSettings.fastBook = fastbookToggle.checked;
       saveSettings(currentSettings);
     });
 
     // --- Listeners for Profit Calculator ---
     profitToggle.addEventListener("change", () => {
+      if (!isPaidUser) return;
       currentSettings.showProfitCalculator = profitToggle.checked;
       saveSettings(currentSettings);
       // Update profit display when setting changes (only if not monitoring)
@@ -646,6 +1302,7 @@ function setupUI() {
     });
 
     mpgInput.addEventListener("input", () => {
+      if (!isPaidUser) return;
       const value = parseFloat(mpgInput.value);
       if (!isNaN(value)) {
         currentSettings.truckMPG = value;
@@ -658,6 +1315,7 @@ function setupUI() {
     });
 
     fuelPriceInput.addEventListener("input", () => {
+      if (!isPaidUser) return;
       const value = parseFloat(fuelPriceInput.value);
       if (!isNaN(value)) {
         currentSettings.fuelPrice = value;
@@ -671,6 +1329,7 @@ function setupUI() {
 
     // --- Listener for Blacklist ---
     blacklistInput.addEventListener("input", () => {
+      if (!isPaidUser) return;
       const keywords = blacklistInput.value
         .split(",")
         .map((k) => k.trim())
@@ -678,14 +1337,71 @@ function setupUI() {
       currentSettings.blacklist = keywords;
       saveSettings(currentSettings);
     });
+
+    // --- Listener for Settings Manage Subscription ---
+    const manageSubBtn = document.getElementById("arl-manage-subscription-btn");
+    if (manageSubBtn) {
+      manageSubBtn.addEventListener("click", () => {
+        if (!isPaidUser) return;
+        console.log("💳 Opening subscription management from settings...");
+        try {
+          extpay.openPaymentPage();
+        } catch (error) {
+          console.error("❌ Subscription management error:", error);
+          alert("Unable to open subscription management. Please try again.");
+        }
+      });
+    }
+  }
+
+  // Payment UI Event Listeners
+  function attachPaymentListeners() {
+    const upgradeBtn = document.getElementById("arl-upgrade-btn");
+    if (upgradeBtn) {
+      upgradeBtn.addEventListener("click", () => {
+        console.log("💳 Opening payment page...");
+        try {
+          extpay.openPaymentPage();
+        } catch (error) {
+          console.error("❌ Payment page error:", error);
+          alert(
+            "Unable to open payment page. Please try again or contact support."
+          );
+        }
+      });
+    }
   }
 
   waitAndInjectPanel();
 }
 
+// ExtPay Payment Callback
+try {
+  extpay.onPaid.addListener((user) => {
+    console.log("🎉 User paid! Refreshing interface...");
+    isPaidUser = true;
+
+    // Remove payment panel and inject normal UI
+    const paymentPanel = document.getElementById(
+      "amazon-relay-detector-payment-panel"
+    );
+    if (paymentPanel) {
+      paymentPanel.remove();
+    }
+
+    // Force refresh the UI to show normal interface
+    setTimeout(() => {
+      location.reload();
+    }, 1000);
+  });
+} catch (error) {
+  console.error("❌ ExtPay onPaid callback error:", error);
+}
+
 setupUI();
 
 function showProfitCalculation() {
+  if (!isPaidUser) return; // Payment gate
   if (!currentSettings.showProfitCalculator) return;
 
   const searchRoot = document.getElementById("active-tab-body");
@@ -811,6 +1527,10 @@ function parsePrice(priceString) {
 }
 
 function startMonitoring() {
+  if (!isPaidUser) {
+    console.log("🚫 Monitoring blocked - payment required");
+    return;
+  }
   console.log("👀 Starting monitoring...");
 
   const seenLoadDetails = new Map(); // Upgraded to a Map

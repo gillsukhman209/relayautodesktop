@@ -1,4 +1,7 @@
-// No background logic for now
+// ExtPay Background Integration
+importScripts("ExtPay.js");
+const extpay = ExtPay("relay-ai-booker");
+extpay.startBackground();
 
 const RULES = [
   {

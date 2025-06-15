@@ -4,14 +4,19 @@
   "version": "1.4",
   "description": "Monitors the Amazon Relay load board for new loads and provides notifications.",
   "permissions": ["storage", "notifications", "declarativeNetRequest"],
-  "host_permissions": ["*://relay.amazon.com/*"],
+  "host_permissions": ["*://relay.amazon.com/*", "https://extensionpay.com/*"],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
       "matches": ["*://relay.amazon.com/loadboard/search*"],
-      "js": ["content.js"],
+      "js": ["ExtPay.js", "content.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://extensionpay.com/*"],
+      "js": ["ExtPay.js"],
       "run_at": "document_start"
     }
   ],
