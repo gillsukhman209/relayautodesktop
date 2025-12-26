@@ -27,7 +27,7 @@
         "*://relay.amazon.com.br/loadboard/search*",
         "*://relay.amazon.com.mx/loadboard/search*"
       ],
-      "js": ["ExtPay.js", "content.js"],
+      "js": ["ExtPay.js", "elementFinder.js", "content.js"],
       "run_at": "document_start"
     },
     {

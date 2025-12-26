@@ -1,17 +1,34 @@
 // ExtPay Integration
 const extpay = ExtPay("relay-ai-booker");
 
+// Debug logging
+const DEBUG = true;
+function log(context, message, data = null) {
+  if (!DEBUG) return;
+  const prefix = `[ContentScript:${context}]`;
+  if (data) {
+    console.log(prefix, message, data);
+  } else {
+    console.log(prefix, message);
+  }
+}
+
+log('init', 'Content script starting...');
+
 let isDetectionActive = false;
 let detectionTimeout;
 let baseDelay = 800;
 let randomDelay = 500;
-let globallySeenNewLoads = new Set(); // To prevent re-detecting the same new loads
+let globallySeenNewLoads = new Set();
 let isPaidUser = false;
 let userPaymentStatus = null;
 
 const SETTINGS_KEY = "amazonRelayLoadDetectorSettings";
 let currentSettings = {};
-let panelWatchdog = null; // For the periodic panel check
+let panelWatchdog = null;
+
+// Limit globallySeenNewLoads to prevent memory leaks
+const MAX_SEEN_LOADS = 1000;
 
 const defaultSettings = {
   baseDelay: 800,
@@ -22,7 +39,7 @@ const defaultSettings = {
   showProfitCalculator: true,
   truckMPG: 6.5,
   fuelPrice: 4.5,
-  blacklist: [], // Default to an empty list
+  blacklist: [],
 };
 
 function saveSettings(settings) {
@@ -36,7 +53,6 @@ function saveSettings(settings) {
 function loadSettings() {
   try {
     const saved = localStorage.getItem(SETTINGS_KEY);
-    // Merge saved settings with defaults to ensure all keys are present
     return saved
       ? { ...defaultSettings, ...JSON.parse(saved) }
       : defaultSettings;
@@ -47,16 +63,14 @@ function loadSettings() {
 }
 
 function clickRefreshButton() {
-  const refreshBtn = document.querySelector("button.css-q7ppch");
+  log('clickRefreshButton', 'Looking for refresh button...');
+  const refreshBtn = ElementFinder.findRefreshButton();
   if (refreshBtn) {
+    log('clickRefreshButton', 'Found and clicking refresh button');
     refreshBtn.click();
+  } else {
+    log('clickRefreshButton', 'Refresh button NOT found');
   }
-}
-
-function injectModernStyles() {
-  // This function is deprecated and its contents are now managed in setupUI.
-  // It is kept here to prevent errors if old versions of the script call it,
-  // but it should be empty.
 }
 
 // Temporarily force paid status for free access
@@ -72,7 +86,6 @@ function updateSubscriptionDisplay(user) {
 
   if (!statusElement || !billingElement) return;
 
-  // Update subscription status
   statusElement.className = "arl-sub-value";
   if (user.subscriptionStatus === "active") {
     statusElement.textContent = "Active";
@@ -87,13 +100,11 @@ function updateSubscriptionDisplay(user) {
     statusElement.textContent = user.subscriptionStatus || "Unknown";
   }
 
-  // Update next billing date
   if (user.subscriptionCancelAt) {
     const cancelDate = new Date(user.subscriptionCancelAt);
     billingElement.textContent = `Ends ${cancelDate.toLocaleDateString()}`;
     billingElement.className = "arl-sub-value warning";
   } else if (user.subscriptionStatus === "active") {
-    // Calculate next billing (ExtPay doesn't provide this directly, so we estimate)
     const paidDate = new Date(user.paidAt);
     const nextBilling = new Date(paidDate);
     nextBilling.setMonth(paidDate.getMonth() + 1);
@@ -110,11 +121,10 @@ function setupPaymentUI() {
   const paymentHTML = `
     <div id="amazon-relay-detector-payment-panel">
       <div class="arl-payment-hero">
-
-                            <h2 class="arl-payment-title">Smart Amazon Relay Refresher Pro</h2>
+        <h2 class="arl-payment-title">Smart Amazon Relay Refresher Pro</h2>
         <p class="arl-payment-subtitle">Professional Load Detection System</p>
       </div>
-      
+
       <div class="arl-value-grid">
         <div class="arl-value-item">
           <div class="arl-value-icon">⚡</div>
@@ -181,7 +191,7 @@ function setupPaymentUI() {
       border-radius: 20px;
       padding: 32px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      box-shadow: 
+      box-shadow:
         0 0 30px rgba(0, 212, 255, 0.3),
         0 10px 50px rgba(0, 0, 0, 0.5),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
@@ -211,12 +221,6 @@ function setupPaymentUI() {
     .arl-payment-hero {
       text-align: center;
       margin-bottom: 32px;
-    }
-
-    .arl-payment-icon {
-      font-size: 56px;
-      margin-bottom: 16px;
-      filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.5));
     }
 
     .arl-payment-title {
@@ -342,7 +346,7 @@ function setupPaymentUI() {
       justify-content: center;
       gap: 12px;
       transition: all 0.3s ease;
-      box-shadow: 
+      box-shadow:
         0 4px 15px rgba(0, 212, 255, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.2);
       margin-bottom: 24px;
@@ -350,7 +354,7 @@ function setupPaymentUI() {
 
     .arl-upgrade-button:hover {
       transform: translateY(-2px);
-      box-shadow: 
+      box-shadow:
         0 6px 20px rgba(0, 212, 255, 0.6),
         inset 0 1px 0 rgba(255, 255, 255, 0.2);
     }
@@ -378,14 +382,13 @@ function setupPaymentUI() {
       color: #a0a0a0;
     }
 
-    /* Responsive adjustments */
     @media (max-width: 500px) {
       #amazon-relay-detector-payment-panel {
         min-width: 280px;
         max-width: 350px;
         padding: 20px;
       }
-      
+
       .arl-value-grid {
         grid-template-columns: 1fr;
         gap: 12px;
@@ -400,7 +403,7 @@ function setupUI() {
   const controlPanelHTML = `
     <div id="amazon-relay-detector-panel">
       <div class="arl-header">
-                        <span class="arl-title">Smart Amazon Relay Refresher</span>
+        <span class="arl-title">Smart Amazon Relay Refresher</span>
         <div class="arl-header-controls">
           <div id="arl-status-container">
             <div id="arl-status-indicator"></div>
@@ -409,17 +412,17 @@ function setupUI() {
           <button id="arl-settings-btn" class="arl-btn-icon">⚙️</button>
         </div>
       </div>
-      
+
       <div class="arl-slider-group">
         <label for="arl-base-speed">Base Speed: <span id="arl-base-speed-value" class="arl-slider-value">800ms</span></label>
         <input type="range" id="arl-base-speed" min="300" max="2000" step="100" value="800">
       </div>
-      
+
       <div class="arl-slider-group">
         <label for="arl-randomizer">Randomizer: <span id="arl-randomizer-value" class="arl-slider-value">500ms</span></label>
         <input type="range" id="arl-randomizer" min="0" max="2000" step="50" value="500">
       </div>
-      
+
       <div class="arl-button-group">
         <button id="arl-start-btn" class="arl-btn arl-btn-start">Start</button>
         <button id="arl-stop-btn" class="arl-btn arl-btn-stop">Stop</button>
@@ -466,9 +469,9 @@ function setupUI() {
            <label for="arl-blacklist-input">Keywords (comma-separated city/code)</label>
           <textarea id="arl-blacklist-input" class="arl-textarea-input" placeholder="e.g., SCK1, Fremont, DFO3"></textarea>
         </div>
-        
+
         <h4 class="arl-settings-title" style="margin-top: 20px; border-top: 1px solid var(--arl-border); padding-top: 15px;">Subscription</h4>
-        
+
         <div id="arl-subscription-status" class="arl-subscription-status">
           <div class="arl-sub-info">
             <span class="arl-sub-label">Status:</span>
@@ -483,7 +486,7 @@ function setupUI() {
             <span id="arl-sub-billing" class="arl-sub-value">Loading...</span>
           </div>
         </div>
-        
+
         <div class="arl-setting-full-width">
           <button id="arl-manage-subscription-btn" class="arl-manage-sub-btn">
             Manage Subscription
@@ -514,7 +517,7 @@ function setupUI() {
       border-radius: 16px;
       padding: 20px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      box-shadow: 
+      box-shadow:
         0 0 30px rgba(0, 212, 255, 0.3),
         0 10px 50px rgba(0, 0, 0, 0.5),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
@@ -542,8 +545,7 @@ function setupUI() {
       0%, 100% { opacity: 0.8; }
       50% { opacity: 1; }
     }
-    
-    /* Responsive adjustments for smaller screens */
+
     @media (max-width: 500px) {
       #amazon-relay-detector-panel {
         min-width: 200px;
@@ -555,7 +557,7 @@ function setupUI() {
         transform: translateX(-50%);
       }
     }
-    
+
     @media (max-width: 400px) {
       #amazon-relay-detector-panel {
         min-width: 180px;
@@ -567,17 +569,17 @@ function setupUI() {
         transform: translateX(-50%);
       }
     }
-    .arl-header { 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: center; 
-      margin-bottom: 20px; 
+    .arl-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
       position: relative;
       z-index: 2;
     }
-    .arl-title { 
-      font-size: 20px; 
-      font-weight: 700; 
+    .arl-title {
+      font-size: 20px;
+      font-weight: 700;
       background: linear-gradient(135deg, #00d4ff, #0066ff);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -585,53 +587,53 @@ function setupUI() {
       filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.3));
     }
     .arl-header-controls { display: flex; align-items: center; gap: 12px; }
-    #arl-status-container { 
-      display: flex; 
-      align-items: center; 
-      background: rgba(255, 255, 255, 0.05); 
-      padding: 6px 12px; 
-      border-radius: 8px; 
+    #arl-status-container {
+      display: flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 12px;
+      border-radius: 8px;
       border: 1px solid rgba(0, 212, 255, 0.2);
       backdrop-filter: blur(10px);
     }
-    #arl-status-indicator { 
-      width: 8px; 
-      height: 8px; 
-      border-radius: 50%; 
-      margin-right: 8px; 
-      background-color: var(--arl-danger); 
+    #arl-status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+      background-color: var(--arl-danger);
       transition: all 0.3s ease;
       box-shadow: 0 0 10px currentColor;
     }
-    #arl-status-text { 
-      font-size: 12px; 
-      font-weight: 600; 
-      color: var(--arl-text); 
+    #arl-status-text {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--arl-text);
       text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
     }
-    
-    .arl-slider-group { 
-      margin-bottom: 20px; 
+
+    .arl-slider-group {
+      margin-bottom: 20px;
       padding: 16px;
       background: rgba(255, 255, 255, 0.03);
       border-radius: 12px;
       border: 1px solid rgba(0, 212, 255, 0.15);
     }
-    .arl-slider-group label { 
-      font-size: 14px; 
-      color: var(--arl-text); 
+    .arl-slider-group label {
+      font-size: 14px;
+      color: var(--arl-text);
       font-weight: 600;
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 12px;
     }
-    .arl-slider-value { 
-      color: #00d4ff; 
-      font-weight: 700; 
+    .arl-slider-value {
+      color: #00d4ff;
+      font-weight: 700;
       text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
     }
-    
+
     input[type="range"]#arl-base-speed, input[type="range"]#arl-randomizer {
       -webkit-appearance: none !important;
       appearance: none !important;
@@ -652,26 +654,26 @@ function setupUI() {
       cursor: pointer !important;
       border-radius: 50% !important;
       border: 2px solid #ffffff !important;
-      box-shadow: 
+      box-shadow:
         0 0 15px rgba(0, 212, 255, 0.6),
         0 2px 8px rgba(0, 0, 0, 0.3) !important;
       transition: all 0.2s ease !important;
     }
     input[type="range"]#arl-base-speed::-webkit-slider-thumb:hover, input[type="range"]#arl-randomizer::-webkit-slider-thumb:hover {
       transform: scale(1.1) !important;
-      box-shadow: 
+      box-shadow:
         0 0 20px rgba(0, 212, 255, 0.8),
         0 4px 12px rgba(0, 0, 0, 0.4) !important;
     }
-    
+
     .arl-button-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
-    .arl-btn { 
-      border: none; 
-      padding: 14px 20px; 
-      border-radius: 12px; 
-      font-weight: 700; 
-      cursor: pointer; 
-      transition: all 0.3s ease; 
+    .arl-btn {
+      border: none;
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
       font-size: 14px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -679,27 +681,27 @@ function setupUI() {
       overflow: hidden;
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     }
-    .arl-btn-start { 
+    .arl-btn-start {
       background: linear-gradient(135deg, #00d4ff, #0066ff);
       color: white;
       border: 1px solid rgba(255, 255, 255, 0.2);
     }
-    .arl-btn-stop { 
+    .arl-btn-stop {
       background: linear-gradient(135deg, #ff4757, #ff3742);
       color: white;
       border: 1px solid rgba(255, 255, 255, 0.2);
     }
-    .arl-btn:hover { 
+    .arl-btn:hover {
       transform: translateY(-2px);
       opacity: 1;
     }
     .arl-btn-start:hover {
-      box-shadow: 
+      box-shadow:
         0 0 25px rgba(0, 212, 255, 0.6),
         0 8px 25px rgba(0, 0, 0, 0.3);
     }
     .arl-btn-stop:hover {
-      box-shadow: 
+      box-shadow:
         0 0 25px rgba(255, 71, 87, 0.6),
         0 8px 25px rgba(0, 0, 0, 0.3);
     }
@@ -730,12 +732,11 @@ function setupUI() {
       color: white;
       border-color: rgba(255, 255, 255, 0.3);
       transform: translateY(-1px);
-      box-shadow: 
+      box-shadow:
         0 0 20px rgba(0, 212, 255, 0.5),
         0 4px 15px rgba(0, 0, 0, 0.3);
     }
 
-    /* --- Subscription Status --- */
     .arl-subscription-status {
       background: rgba(0, 212, 255, 0.05);
       border: 1px solid rgba(0, 212, 255, 0.2);
@@ -802,8 +803,7 @@ function setupUI() {
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
     }
-    
-    /* --- Settings Panel --- */
+
     #arl-settings-panel {
       margin-top: 20px;
       padding-top: 15px;
@@ -815,7 +815,7 @@ function setupUI() {
       from { opacity: 0; transform: translateY(-10px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    
+
     .arl-settings-title {
       font-size: 14px;
       font-weight: 600;
@@ -833,12 +833,12 @@ function setupUI() {
       font-size: 14px;
       color: var(--arl-text);
     }
-    
+
     .arl-setting-disabled {
       opacity: 0.5;
       pointer-events: none;
     }
-    
+
     .arl-coming-soon {
       background: linear-gradient(135deg, #ff6b6b, #ffa726);
       color: white;
@@ -851,17 +851,16 @@ function setupUI() {
       letter-spacing: 0.5px;
       box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
     }
-    
+
     .arl-toggle-disabled .arl-toggle-slider {
       background-color: #333 !important;
       cursor: not-allowed !important;
     }
-    
+
     .arl-toggle-disabled .arl-toggle-slider:before {
       background-color: #666 !important;
     }
 
-    /* Custom Toggle Switch */
     .arl-toggle-switch {
       position: relative;
       display: inline-block;
@@ -884,8 +883,7 @@ function setupUI() {
     }
     input:checked + .arl-toggle-slider { background-color: var(--arl-success); }
     input:checked + .arl-toggle-slider:before { transform: translateX(20px); }
-    
-    /* Custom Number Input */
+
     .arl-number-input {
       background: var(--arl-bg-light);
       border: 1px solid var(--arl-border);
@@ -925,7 +923,6 @@ function setupUI() {
       resize: vertical;
     }
 
-    /* --- Profit Badge --- */
     .arl-profit-badge {
       font-size: 11px;
       font-weight: 600;
@@ -948,29 +945,25 @@ function setupUI() {
       background-color: rgba(248, 81, 73, 0.15);
     }
 
-    /* --- Inline Fast Book Button --- */
     .arl-inline-fast-book-btn {
-      /* Reset for flexbox */
       background: none;
       border: none;
       padding: 0;
-      margin: 0 12px; /* Symmetrical margin for both layouts */
-      
-      /* Flex properties */
+      margin: 0 12px;
+
       display: flex !important;
       align-items: center;
       justify-content: center;
-      align-self: center; /* Vertically center in the row */
-      flex-shrink: 0; /* Prevent shrinking on small screens */
+      align-self: center;
+      flex-shrink: 0;
 
-      /* Visual Style (Pill Button) */
       padding: 8px 16px !important;
       background-color: var(--arl-primary) !important;
       color: white !important;
-      border-radius: 30px !important; /* Rounded pill shape */
+      border-radius: 30px !important;
       font-size: 13px !important;
       font-weight: 600 !important;
-      white-space: nowrap; /* Prevent "Fast Book" from wrapping */
+      white-space: nowrap;
       cursor: pointer !important;
       box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
       transition: transform 0.2s ease, background-color 0.2s ease !important;
@@ -980,17 +973,15 @@ function setupUI() {
         transform: scale(1.1) !important;
     }
 
-    /* Make the button smaller on desktop screens */
     @media (min-width: 1024px) {
       .arl-inline-fast-book-btn {
-        padding: 6px 6px !important; /* Halved horizontal padding for a tighter look */
+        padding: 6px 6px !important;
         font-size: 12px !important;
       }
     }
-    
-    /* --- Priority Lane --- */
+
     #arl-priority-lane {
-      display: none; /* Hidden by default */
+      display: none;
       margin-bottom: 20px;
     }
     .arl-priority-header {
@@ -1001,7 +992,7 @@ function setupUI() {
       padding-bottom: 5px;
       border-bottom: 1px solid var(--arl-border);
     }
-    
+
     @keyframes arl-slide-in {
       from {
         opacity: 0;
@@ -1062,17 +1053,18 @@ function setupUI() {
   `;
 
   async function waitAndInjectPanel() {
+    log('waitAndInjectPanel', 'Starting panel injection...');
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
-      const searchPanel = document.querySelector(".search__panel");
+      log('waitAndInjectPanel', `Attempt ${attempts}/30`);
+      const searchPanel = ElementFinder.findSearchPanel();
+      log('waitAndInjectPanel', `Search panel found: ${!!searchPanel}`, searchPanel?.className);
       if (searchPanel) {
-        // Check payment status first
         const isPaid = await checkPaymentStatus();
+        log('waitAndInjectPanel', `isPaid: ${isPaid}`);
 
         if (isPaid) {
-          // User is paid - show normal UI
-          // First, inject styles if they don't exist
           if (!document.getElementById("arl-styles")) {
             const styleSheet = document.createElement("style");
             styleSheet.id = "arl-styles";
@@ -1080,8 +1072,7 @@ function setupUI() {
             document.head.appendChild(styleSheet);
           }
 
-          // Then, inject the Priority Lane container if it doesn't exist
-          const loadListContainer = document.querySelector('[role="list"]');
+          const loadListContainer = ElementFinder.findLoadList();
           if (
             loadListContainer &&
             !document.getElementById("arl-priority-lane")
@@ -1097,7 +1088,6 @@ function setupUI() {
             );
           }
 
-          // Then, inject the panel if it doesn't exist
           if (
             !document.getElementById("amazon-relay-detector-panel") &&
             !document.getElementById("amazon-relay-detector-payment-panel")
@@ -1105,7 +1095,6 @@ function setupUI() {
             searchPanel.insertAdjacentHTML("afterend", controlPanelHTML);
             applySettingsToUI();
             attachListeners();
-            // Show profit calculations initially since monitoring is not active
             setTimeout(() => {
               if (!isDetectionActive) {
                 showProfitCalculation();
@@ -1113,10 +1102,8 @@ function setupUI() {
             }, 500);
           }
         } else {
-          // User is not paid - show payment UI
           const { paymentHTML, paymentStyles } = setupPaymentUI();
 
-          // Inject payment styles if they don't exist
           if (!document.getElementById("arl-payment-styles")) {
             const styleSheet = document.createElement("style");
             styleSheet.id = "arl-payment-styles";
@@ -1124,7 +1111,6 @@ function setupUI() {
             document.head.appendChild(styleSheet);
           }
 
-          // Inject payment panel if it doesn't exist
           if (
             !document.getElementById("amazon-relay-detector-payment-panel") &&
             !document.getElementById("amazon-relay-detector-panel")
@@ -1134,21 +1120,22 @@ function setupUI() {
           }
         }
         clearInterval(interval);
-        startPanelWatchdog(); // Start the watchdog after successful injection
+        startPanelWatchdog();
       }
-      if (attempts > 30) clearInterval(interval);
+      if (attempts > 30) {
+        clearInterval(interval);
+        log('waitAndInjectPanel', 'FAILED - All 30 attempts exhausted, showing warning');
+        ElementFinder.showWarning('searchPanel', 'Extension panel');
+      }
     }, 300);
   }
 
-  // Watchdog function to ensure panel stays injected
   function startPanelWatchdog() {
-    // Clear any existing watchdog
     if (panelWatchdog) {
       clearInterval(panelWatchdog);
     }
 
     panelWatchdog = setInterval(async () => {
-      // Check if either panel exists
       const normalPanel = document.getElementById(
         "amazon-relay-detector-panel"
       );
@@ -1157,19 +1144,16 @@ function setupUI() {
       );
 
       if (!normalPanel && !paymentPanel) {
-        // Panel is missing, re-inject it
-        const searchPanel = document.querySelector(".search__panel");
+        const searchPanel = ElementFinder.findSearchPanel();
         if (searchPanel) {
           const isPaid = await checkPaymentStatus();
 
           if (isPaid) {
-            // Re-inject normal panel
             searchPanel.insertAdjacentHTML("afterend", controlPanelHTML);
             applySettingsToUI();
             attachListeners();
 
-            // Re-inject priority lane if needed
-            const loadListContainer = document.querySelector('[role="list"]');
+            const loadListContainer = ElementFinder.findLoadList();
             if (
               loadListContainer &&
               !document.getElementById("arl-priority-lane")
@@ -1185,17 +1169,14 @@ function setupUI() {
               );
             }
 
-            // Show profit calculations if not monitoring
             setTimeout(() => {
               if (!isDetectionActive) {
                 showProfitCalculation();
               }
             }, 100);
           } else {
-            // Re-inject payment panel
             const { paymentHTML, paymentStyles } = setupPaymentUI();
 
-            // Re-inject payment styles if needed
             if (!document.getElementById("arl-payment-styles")) {
               const styleSheet = document.createElement("style");
               styleSheet.id = "arl-payment-styles";
@@ -1208,17 +1189,15 @@ function setupUI() {
           }
         }
       }
-    }, 1500); // Check every 1.5 seconds
+    }, 1500);
   }
 
   function applySettingsToUI() {
     currentSettings = loadSettings();
 
-    // Apply to script variables
     baseDelay = currentSettings.baseDelay;
     randomDelay = currentSettings.randomDelay;
 
-    // Apply to UI elements
     const baseSpeedSlider = document.getElementById("arl-base-speed");
     const randomizerSlider = document.getElementById("arl-randomizer");
 
@@ -1247,14 +1226,12 @@ function setupUI() {
     document.getElementById("arl-fastbook-toggle").checked =
       currentSettings.fastBook;
 
-    // Profit Calculator settings
     document.getElementById("arl-profit-toggle").checked =
       currentSettings.showProfitCalculator;
     document.getElementById("arl-mpg-input").value = currentSettings.truckMPG;
     document.getElementById("arl-fuel-price-input").value =
       currentSettings.fuelPrice;
 
-    // Blacklist setting
     document.getElementById("arl-blacklist-input").value = (
       currentSettings.blacklist || []
     ).join(", ");
@@ -1272,12 +1249,9 @@ function setupUI() {
     const settingsBtn = document.getElementById("arl-settings-btn");
     const settingsPanel = document.getElementById("arl-settings-panel");
 
-    // Settings controls
     const minPriceInput = document.getElementById("arl-min-price-increase");
-    const autobookerToggle = document.getElementById("arl-autobooker-toggle");
     const fastbookToggle = document.getElementById("arl-fastbook-toggle");
 
-    // Profit Calculator listeners
     const profitToggle = document.getElementById("arl-profit-toggle");
     const mpgInput = document.getElementById("arl-mpg-input");
     const fuelPriceInput = document.getElementById("arl-fuel-price-input");
@@ -1311,7 +1285,6 @@ function setupUI() {
       statusIndicator.style.backgroundColor = "var(--arl-success)";
       startBtn.disabled = true;
       stopBtn.disabled = false;
-      // Hide profit calculations when monitoring starts
       hideProfitCalculation();
       startMonitoring();
     });
@@ -1321,7 +1294,6 @@ function setupUI() {
         return;
       }
       stopMonitoring("Stopped ");
-      // Show profit calculation when stop button is clicked
       showProfitCalculation();
     });
 
@@ -1329,9 +1301,7 @@ function setupUI() {
       const isHidden = settingsPanel.style.display === "none";
       settingsPanel.style.display = isHidden ? "block" : "none";
 
-      // Refresh subscription status when opening settings
       if (isHidden && isPaidUser) {
-        // --- TEMPORARILY FREE MODE ---
         const mockUser = {
           paid: true,
           subscriptionStatus: "active",
@@ -1339,14 +1309,9 @@ function setupUI() {
           subscriptionCancelAt: null,
         };
         updateSubscriptionDisplay(mockUser);
-
-        // --- ORIGINAL CODE ---
-        // const user = await extpay.getUser();
-        // updateSubscriptionDisplay(user);
       }
     });
 
-    // --- Listeners for saving settings ---
     minPriceInput.addEventListener("input", () => {
       if (!isPaidUser) return;
       const value = parseFloat(minPriceInput.value);
@@ -1356,25 +1321,16 @@ function setupUI() {
       }
     });
 
-    // Autobooker is disabled - coming soon
-    // autobookerToggle.addEventListener("change", () => {
-    //   if (!isPaidUser) return;
-    //   currentSettings.autobooker = autobookerToggle.checked;
-    //   saveSettings(currentSettings);
-    // });
-
     fastbookToggle.addEventListener("change", () => {
       if (!isPaidUser) return;
       currentSettings.fastBook = fastbookToggle.checked;
       saveSettings(currentSettings);
     });
 
-    // --- Listeners for Profit Calculator ---
     profitToggle.addEventListener("change", () => {
       if (!isPaidUser) return;
       currentSettings.showProfitCalculator = profitToggle.checked;
       saveSettings(currentSettings);
-      // Update profit display when setting changes (only if not monitoring)
       if (!isDetectionActive) {
         if (currentSettings.showProfitCalculator) {
           showProfitCalculation();
@@ -1390,7 +1346,6 @@ function setupUI() {
       if (!isNaN(value)) {
         currentSettings.truckMPG = value;
         saveSettings(currentSettings);
-        // Update profit display when MPG changes (only if not monitoring)
         if (!isDetectionActive && currentSettings.showProfitCalculator) {
           showProfitCalculation();
         }
@@ -1403,14 +1358,12 @@ function setupUI() {
       if (!isNaN(value)) {
         currentSettings.fuelPrice = value;
         saveSettings(currentSettings);
-        // Update profit display when fuel price changes (only if not monitoring)
         if (!isDetectionActive && currentSettings.showProfitCalculator) {
           showProfitCalculation();
         }
       }
     });
 
-    // --- Listener for Blacklist ---
     blacklistInput.addEventListener("input", () => {
       if (!isPaidUser) return;
       const keywords = blacklistInput.value
@@ -1421,7 +1374,6 @@ function setupUI() {
       saveSettings(currentSettings);
     });
 
-    // --- Listener for Settings Manage Subscription ---
     const manageSubBtn = document.getElementById("arl-manage-subscription-btn");
     if (manageSubBtn) {
       manageSubBtn.addEventListener("click", () => {
@@ -1435,7 +1387,6 @@ function setupUI() {
     }
   }
 
-  // Payment UI Event Listeners
   function attachPaymentListeners() {
     const upgradeBtn = document.getElementById("arl-upgrade-btn");
     if (upgradeBtn) {
@@ -1453,7 +1404,6 @@ function setupUI() {
 
   waitAndInjectPanel();
 
-  // Cleanup watchdog when page unloads
   window.addEventListener("beforeunload", () => {
     if (panelWatchdog) {
       clearInterval(panelWatchdog);
@@ -1466,7 +1416,6 @@ try {
   extpay.onPaid.addListener((user) => {
     isPaidUser = true;
 
-    // Remove payment panel and inject normal UI
     const paymentPanel = document.getElementById(
       "amazon-relay-detector-payment-panel"
     );
@@ -1474,7 +1423,6 @@ try {
       paymentPanel.remove();
     }
 
-    // Force refresh the UI to show normal interface
     setTimeout(() => {
       location.reload();
     }, 1000);
@@ -1484,26 +1432,29 @@ try {
 setupUI();
 
 function showProfitCalculation() {
-  if (!isPaidUser) return; // Payment gate
-  if (!currentSettings.showProfitCalculator) return;
+  log('showProfitCalculation', 'Starting...');
+  if (!isPaidUser) {
+    log('showProfitCalculation', 'Skipped - not paid user');
+    return;
+  }
+  if (!currentSettings.showProfitCalculator) {
+    log('showProfitCalculation', 'Skipped - profit calculator disabled');
+    return;
+  }
 
-  const searchRoot = document.getElementById("active-tab-body");
-  if (!searchRoot) return;
-
-  const currentCards = Array.from(
-    searchRoot.querySelectorAll(".load-card, .wo-card-header--highlighted")
-  );
+  // Use ElementFinder to get load cards (excludes Similar matches)
+  const currentCards = ElementFinder.findLoadCards();
+  log('showProfitCalculation', `Found ${currentCards.length} cards`);
 
   currentCards.forEach((card) => {
-    const { id, price, miles } = getCardDetails(card);
-    if (!id) return;
+    const details = ElementFinder.getCardDetails(card);
+    if (!details.id) return;
 
-    // Remove any old profit badge before adding a new one
     const oldProfitBadge = card.querySelector(".arl-profit-badge");
     if (oldProfitBadge) oldProfitBadge.remove();
 
-    const payout = parsePrice(price);
-    const tripMiles = parsePrice(miles);
+    const payout = parsePrice(details.price);
+    const tripMiles = parsePrice(details.miles);
     const mpg = currentSettings.truckMPG;
     const fuelPrice = currentSettings.fuelPrice;
 
@@ -1521,14 +1472,8 @@ function showProfitCalculation() {
         profitBadge.textContent = `Profit: -$${Math.abs(profit).toFixed(2)}`;
       }
 
-      // Inject badge into the price container
-      const desktopPriceContainer = card.querySelector(
-        ".css-1xqwq2z .css-1dk3tf8"
-      );
-      const mobilePriceContainer = card.querySelector(
-        ".css-ntd8uw .css-1dk3tf8"
-      );
-      const targetContainer = desktopPriceContainer || mobilePriceContainer;
+      // Use ElementFinder to find the price container (works on all layouts)
+      const targetContainer = ElementFinder.findPriceContainer(card);
       if (targetContainer) {
         targetContainer.appendChild(profitBadge);
       }
@@ -1562,78 +1507,43 @@ function stopMonitoring(message = "Stopped") {
 
   clearTimeout(detectionTimeout);
 
-  // Show profit calculation when monitoring stops
   showProfitCalculation();
-}
-
-function getCardDetails(cardElement) {
-  const id = cardElement.querySelector("div[id]")?.id;
-  const priceElement = cardElement.querySelector(
-    ".wo-total_payout, .wo-total_payout__modified-load-increase-attr"
-  );
-  const price = priceElement ? priceElement.textContent.trim() : null;
-
-  // Find all spans containing "mi", then filter out the one for deadhead.
-  const allMileSpans = Array.from(cardElement.querySelectorAll("span")).filter(
-    (s) => s.textContent.includes(" mi")
-  );
-  const deadheadSpan = cardElement.querySelector("span[title='Deadhead']");
-  const tripMilesSpan = allMileSpans.find(
-    (s) =>
-      !s.parentElement.contains(deadheadSpan) && !s.textContent.includes("/mi")
-  );
-
-  const milesText = tripMilesSpan ? tripMilesSpan.textContent.trim() : null;
-
-  // Get origin and destination text for blacklist checking
-  const locationSpans = Array.from(
-    cardElement.querySelectorAll(".wo-card-header__components")
-  );
-  const originText = locationSpans[0] ? locationSpans[0].textContent : "";
-  const destinationText = locationSpans[1] ? locationSpans[1].textContent : "";
-
-  return {
-    id,
-    price,
-    miles: milesText,
-    origin: originText,
-    destination: destinationText,
-  };
 }
 
 function parsePrice(priceString) {
   if (!priceString) return null;
-  // Remove dollar signs, commas, and any non-numeric characters except the decimal point.
   const cleanedString = priceString.replace(/[^0-9.]/g, "");
   return parseFloat(cleanedString);
 }
 
 function startMonitoring() {
+  log('startMonitoring', 'Starting monitoring...');
   if (!isPaidUser) {
+    log('startMonitoring', 'Skipped - not paid user');
     return;
   }
 
-  const seenLoadDetails = new Map(); // Upgraded to a Map
-  const searchRoot = document.getElementById("active-tab-body");
+  const seenLoadDetails = new Map();
 
-  if (searchRoot) {
-    const allCards = Array.from(
-      searchRoot.querySelectorAll(".load-card, .wo-card-header--highlighted")
-    );
+  // Use ElementFinder to get initial load cards
+  const allCards = ElementFinder.findLoadCards();
+  log('startMonitoring', `Initial cards found: ${allCards.length}`);
 
-    allCards.forEach((card) => {
-      const { id, price } = getCardDetails(card);
-      if (id) {
-        seenLoadDetails.set(id, price);
-      }
-    });
-  }
+  allCards.forEach((card) => {
+    const details = ElementFinder.getCardDetails(card);
+    if (details.id) {
+      seenLoadDetails.set(details.id, details.price);
+    }
+  });
+  log('startMonitoring', `Tracking ${seenLoadDetails.size} loads`);
 
   function detectionCycle() {
     if (!isDetectionActive) {
+      log('detectionCycle', 'Stopped - detection not active');
       return;
     }
 
+    log('detectionCycle', 'Clicking refresh button...');
     clickRefreshButton();
 
     detectionTimeout = setTimeout(() => {
@@ -1646,28 +1556,23 @@ function startMonitoring() {
 
       const minPriceIncrease = currentSettings.minPriceIncrease || 5;
 
-      const currentCards = Array.from(
-        searchRoot.querySelectorAll(".load-card, .wo-card-header--highlighted")
-      );
+      // Use ElementFinder to get current load cards (excludes Similar matches)
+      const currentCards = ElementFinder.findLoadCards();
 
       const newOrUpdatedLoads = [];
       const currentLoadDetails = new Map();
-      const blacklistSet = new Set(
-        (currentSettings.blacklist || []).map((k) => k.toUpperCase())
-      );
 
       currentCards.forEach((card) => {
-        const { id, price, origin, destination } = getCardDetails(card);
-        if (!id) return; // Skip cards without an ID
+        const details = ElementFinder.getCardDetails(card);
+        if (!details.id) return;
 
-        currentLoadDetails.set(id, price);
+        currentLoadDetails.set(details.id, details.price);
 
-        const storedPrice = seenLoadDetails.get(id);
+        const storedPrice = seenLoadDetails.get(details.id);
 
-        if (!seenLoadDetails.has(id) && !globallySeenNewLoads.has(id)) {
-          // It's a genuinely new load. Now, check against the blacklist.
-          const originUpper = origin.toUpperCase();
-          const destUpper = destination.toUpperCase();
+        if (!seenLoadDetails.has(details.id) && !globallySeenNewLoads.has(details.id)) {
+          const originUpper = details.origin.toUpperCase();
+          const destUpper = details.destination.toUpperCase();
 
           const isBlacklisted = (currentSettings.blacklist || []).some(
             (keyword) => {
@@ -1680,34 +1585,28 @@ function startMonitoring() {
           );
 
           if (!isBlacklisted) {
-            // This is a brand new, non-blacklisted load
-            newOrUpdatedLoads.push({ id, card, type: "new" });
+            newOrUpdatedLoads.push({ id: details.id, card, type: "new" });
           }
-        } else if (price && storedPrice !== price) {
-          // This is a price update
+        } else if (details.price && storedPrice !== details.price) {
           const oldPriceNum = parsePrice(storedPrice);
-          const newPriceNum = parsePrice(price);
+          const newPriceNum = parsePrice(details.price);
 
           if (oldPriceNum !== null && newPriceNum !== null) {
             const difference = newPriceNum - oldPriceNum;
 
-            // Check if the price increase meets the minimum requirement
             if (difference >= minPriceIncrease) {
               newOrUpdatedLoads.push({
-                id,
+                id: details.id,
                 card,
                 type: "price_update",
                 oldPrice: storedPrice,
-                newPrice: price,
+                newPrice: details.price,
                 difference: difference,
               });
             }
           }
         }
       });
-
-      // --- Profit calculation is moved to showProfitCalculation() function ---
-      // This will only be shown when monitoring is stopped
 
       if (newOrUpdatedLoads.length > 0) {
         playSound();
@@ -1716,7 +1615,6 @@ function startMonitoring() {
         if (priorityLane) priorityLane.style.display = "block";
 
         for (const load of newOrUpdatedLoads) {
-          // Clean up any old highlights or badges first
           load.card.classList.remove(
             "new-load-highlight",
             "price-update-highlight"
@@ -1729,47 +1627,45 @@ function startMonitoring() {
           const badge = document.createElement("div");
 
           if (load.type === "new") {
-            globallySeenNewLoads.add(load.id); // Add to the master seen list
+            // Add to seen loads with memory limit
+            if (globallySeenNewLoads.size >= MAX_SEEN_LOADS) {
+              const firstKey = globallySeenNewLoads.values().next().value;
+              globallySeenNewLoads.delete(firstKey);
+            }
+            globallySeenNewLoads.add(load.id);
+
             load.card.classList.add("new-load-highlight");
             badge.className = "new-load-badge";
             badge.textContent = "New";
 
             if (currentSettings.fastBook) {
-              // 1. Create the button. The style is the same for both layouts.
               const fastBookBtn = document.createElement("button");
               fastBookBtn.className = "arl-inline-fast-book-btn";
               fastBookBtn.textContent = "Fast Book";
               fastBookBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
 
-                // Click the first child of the load card to open details
                 const clickableElement = load.card.firstElementChild;
                 if (clickableElement) {
                   clickableElement.click();
-                  // Call the new helper function to wait for and click the book button
                   waitForAndClickBookButton();
                 } else {
-                  load.card.click(); // Fallback
+                  load.card.click();
                 }
               });
 
-              // 2. Try to inject using the DESKTOP/TABLET layout structure.
-              const desktopPriceColumn =
-                load.card.querySelector(".css-1xqwq2z");
-              if (desktopPriceColumn && desktopPriceColumn.parentElement) {
-                // Insert the button right before the entire price column.
-                desktopPriceColumn.parentElement.insertBefore(
-                  fastBookBtn,
-                  desktopPriceColumn
-                );
-              }
-              // 3. FALLBACK: Try to inject using the MOBILE layout structure.
-              else {
-                const mobilePriceContainer =
-                  load.card.querySelector(".css-ntd8uw");
-                if (mobilePriceContainer) {
-                  // On mobile, prepend the button to the container that holds the price and the arrow.
-                  mobilePriceContainer.prepend(fastBookBtn);
+              // Use ElementFinder to find the price column for injection
+              const priceColumnInfo = ElementFinder.findPriceColumn(load.card);
+              if (priceColumnInfo) {
+                if (priceColumnInfo.layout === 'desktop' || priceColumnInfo.layout === 'unknown') {
+                  // Desktop: Insert before the price column
+                  priceColumnInfo.parentForInjection.insertBefore(
+                    fastBookBtn,
+                    priceColumnInfo.container
+                  );
+                } else {
+                  // Mobile: Prepend to the container
+                  priceColumnInfo.container.prepend(fastBookBtn);
                 }
               }
             }
@@ -1797,7 +1693,6 @@ function startMonitoring() {
         }
         stopMonitoring("Changes detected");
       } else {
-        // Update the master list for the next cycle
         seenLoadDetails.clear();
         currentLoadDetails.forEach((price, id) =>
           seenLoadDetails.set(id, price)
@@ -1813,14 +1708,13 @@ function startMonitoring() {
 
 function waitForAndClickBookButton() {
   let attempts = 0;
-  const maxAttempts = 50; // Try for 5 seconds (50 * 100ms)
+  const maxAttempts = 50;
   const interval = setInterval(() => {
-    // Find the 'Book' button inside the details panel
     const bookButton = document.querySelector("button#rlb-book-btn");
 
     if (bookButton) {
       bookButton.click();
-      clearInterval(interval); // Stop searching once found and clicked
+      clearInterval(interval);
       waitForAndClickConfirmButton();
       return;
     }
@@ -1834,16 +1728,15 @@ function waitForAndClickBookButton() {
 
 function waitForAndClickConfirmButton() {
   let attempts = 0;
-  const maxAttempts = 50; // Try for 5 seconds
+  const maxAttempts = 50;
   const interval = setInterval(() => {
-    // Find the final 'Yes, confirm booking' button by its unique ID
     const confirmButton = document.querySelector(
       "button#rlb-book-trip-confirm-booking-btn"
     );
 
     if (confirmButton) {
       confirmButton.click();
-      clearInterval(interval); // Final step, stop searching
+      clearInterval(interval);
       return;
     }
 
