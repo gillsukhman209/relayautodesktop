@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relay AI Booker Icon Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        canvas {
+            border: 2px solid #00d4ff;
+            border-radius: 8px;
+            margin: 20px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #00d4ff, #0066ff);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Relay AI Booker Icon Generator</h1>
+    <canvas id="iconCanvas" width="128" height="128"></canvas>
+    <button onclick="downloadIcon()">Download 128x128 Icon</button>
+
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function createIcon() {
+            // Clear canvas
+            ctx.clearRect(0, 0, 128, 128);
+
+            // Background gradient
+            const bgGradient = ctx.createLinearGradient(0, 0, 128, 128);
+            bgGradient.addColorStop(0, '#0a0a0a');
+            bgGradient.addColorStop(0.5, '#1a1a2e');
+            bgGradient.addColorStop(1, '#16213e');
+
+            // Draw background with rounded corners
+            ctx.fillStyle = bgGradient;
+            roundedRect(ctx, 0, 0, 128, 128, 16);
+            ctx.fill();
+
+            // Border glow
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 2;
+            ctx.shadowColor = '#00d4ff';
+            ctx.shadowBlur = 8;
+            roundedRect(ctx, 1, 1, 126, 126, 15);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Main truck/relay icon
+            drawTruck(ctx);
+
+            // AI circuit pattern
+            drawAIPattern(ctx);
+
+            // "AI" text
+            drawAIText(ctx);
+        }
+
+        function roundedRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+        function drawTruck(ctx) {
+            // Truck body
+            const truckGradient = ctx.createLinearGradient(30, 40, 30, 80);
+            truckGradient.addColorStop(0, '#00d4ff');
+            truckGradient.addColorStop(1, '#0066ff');
+
+            ctx.fillStyle = truckGradient;
+            ctx.fillRect(30, 50, 45, 25); // Main body
+            ctx.fillRect(20, 55, 15, 15); // Cab
+
+            // Truck details
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(22, 57, 3, 3); // Window
+            ctx.fillRect(32, 52, 8, 3); // Front detail
+
+            // Wheels
+            ctx.fillStyle = '#333333';
+            ctx.beginPath();
+            ctx.arc(28, 80, 6, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(67, 80, 6, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Wheel rims
+            ctx.fillStyle = '#00d4ff';
+            ctx.beginPath();
+            ctx.arc(28, 80, 3, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(67, 80, 3, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function drawAIPattern(ctx) {
+            // Circuit-like AI pattern
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 1.5;
+            ctx.globalAlpha = 0.6;
+
+            // Neural network nodes
+            const nodes = [
+                { x: 85, y: 25 }, { x: 100, y: 35 }, { x: 110, y: 50 },
+                { x: 95, y: 65 }, { x: 105, y: 80 }, { x: 90, y: 95 }
+            ];
+
+            // Draw connections
+            ctx.beginPath();
+            for (let i = 0; i < nodes.length - 1; i++) {
+                ctx.moveTo(nodes[i].x, nodes[i].y);
+                ctx.lineTo(nodes[i + 1].x, nodes[i + 1].y);
+            }
+            ctx.stroke();
+
+            // Draw nodes
+            ctx.fillStyle = '#00d4ff';
+            nodes.forEach(node => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 2, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+
+            ctx.globalAlpha = 1;
+        }
+
+        function drawAIText(ctx) {
+            // "AI" text
+            ctx.font = 'bold 20px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = '#00d4ff';
+            ctx.shadowBlur = 4;
+            ctx.fillText('AI', 64, 110);
+            ctx.shadowBlur = 0;
+
+            // Small "RELAY" text
+            ctx.font = 'bold 8px Arial';
+            ctx.fillStyle = '#00d4ff';
+            ctx.fillText('RELAY', 64, 25);
+        }
+
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'relay-ai-booker-icon-128x128.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        // Generate the icon when page loads
+        createIcon();
+    </script>
+</body>
+
+</html>

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Amazon Relay Load Detector",
-  "version": "1.4",
-  "description": "Monitors the Amazon Relay load board for new loads and provides notifications.",
+  "name": "Smart Amazon Relay Refresher",
+  "version": "1.5",
+  "description": "Detects and alerts you to new Amazon Relay loads with profit calculations, blacklist filtering, and smart notifications.",
   "permissions": ["storage", "notifications", "declarativeNetRequest"],
   "host_permissions": ["*://relay.amazon.com/*", "https://extensionpay.com/*"],
   "background": {
@@ -10,7 +10,23 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://relay.amazon.com/loadboard/search*"],
+      "matches": [
+        "*://relay.amazon.com/loadboard/search*",
+        "*://relay.amazon.ca/loadboard/search*",
+        "*://relay.amazon.co.uk/loadboard/search*",
+        "*://relay.amazon.de/loadboard/search*",
+        "*://relay.amazon.fr/loadboard/search*",
+        "*://relay.amazon.it/loadboard/search*",
+        "*://relay.amazon.es/loadboard/search*",
+        "*://relay.amazon.nl/loadboard/search*",
+        "*://relay.amazon.se/loadboard/search*",
+        "*://relay.amazon.pl/loadboard/search*",
+        "*://relay.amazon.com.au/loadboard/search*",
+        "*://relay.amazon.co.jp/loadboard/search*",
+        "*://relay.amazon.in/loadboard/search*",
+        "*://relay.amazon.com.br/loadboard/search*",
+        "*://relay.amazon.com.mx/loadboard/search*"
+      ],
       "js": ["ExtPay.js", "content.js"],
       "run_at": "document_start"
     },
@@ -22,7 +38,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["ding.wav", "cash.mp3"],
+      "resources": ["cash.mp3", "cash2.mp3"],
       "matches": ["<all_urls>"]
     }
   ]

@@ -31,8 +31,6 @@ chrome.runtime.onInstalled.addListener(() => {
             "Error updating declarativeNetRequest rules:",
             chrome.runtime.lastError
           );
-        } else {
-          console.log("ARL: Network blocking rules have been updated.");
         }
       }
     );

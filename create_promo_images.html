@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relay AI Booker - Promo Images Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .image-section {
+            margin: 40px 0;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 12px;
+            border: 1px solid #00d4ff;
+        }
+
+        canvas {
+            border: 2px solid #00d4ff;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: block;
+        }
+
+        button {
+            background: linear-gradient(135deg, #00d4ff, #0066ff);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 10px 10px 0;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
+        }
+
+        h2 {
+            color: #00d4ff;
+            margin-bottom: 10px;
+        }
+
+        .specs {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🚀 Relay AI Booker - Promotional Images Generator</h1>
+
+        <!-- Screenshots -->
+        <div class="image-section">
+            <h2>📸 Screenshots</h2>
+            <div class="specs">1280x800 pixels - JPEG or 24-bit PNG (no alpha)</div>
+            <canvas id="screenshotCanvas" width="1280" height="800"></canvas>
+            <button onclick="downloadScreenshot()">Download Screenshot (1280x800)</button>
+        </div>
+
+        <!-- Small Promo Tile -->
+        <div class="image-section">
+            <h2>🎯 Small Promo Tile</h2>
+            <div class="specs">440x280 pixels - JPEG or 24-bit PNG (no alpha)</div>
+            <canvas id="smallPromoCanvas" width="440" height="280"></canvas>
+            <button onclick="downloadSmallPromo()">Download Small Promo (440x280)</button>
+        </div>
+
+        <!-- Marquee Promo Tile -->
+        <div class="image-section">
+            <h2>🎪 Marquee Promo Tile</h2>
+            <div class="specs">1400x560 pixels - JPEG or 24-bit PNG (no alpha)</div>
+            <canvas id="marqueeCanvas" width="1400" height="560"></canvas>
+            <button onclick="downloadMarquee()">Download Marquee Promo (1400x560)</button>
+        </div>
+
+        <button onclick="downloadAll()"
+            style="background: linear-gradient(135deg, #ff6b6b, #ffa726); margin-top: 20px;">
+            📦 Download All Images
+        </button>
+    </div>
+
+    <script>
+        // Common design elements
+        function createGradientBackground(ctx, width, height) {
+            const gradient = ctx.createLinearGradient(0, 0, width, height);
+            gradient.addColorStop(0, '#0a0a0a');
+            gradient.addColorStop(0.3, '#1a1a2e');
+            gradient.addColorStop(0.7, '#16213e');
+            gradient.addColorStop(1, '#0a0a0a');
+            return gradient;
+        }
+
+        function drawTruck(ctx, x, y, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            // Truck body gradient
+            const truckGradient = ctx.createLinearGradient(0, 0, 0, 30);
+            truckGradient.addColorStop(0, '#00d4ff');
+            truckGradient.addColorStop(1, '#0066ff');
+
+            ctx.fillStyle = truckGradient;
+            ctx.fillRect(0, 0, 45, 25); // Main body
+            ctx.fillRect(-10, 5, 15, 15); // Cab
+
+            // Details
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-8, 7, 3, 3); // Window
+            ctx.fillRect(2, 2, 8, 3); // Front detail
+
+            // Wheels
+            ctx.fillStyle = '#333333';
+            ctx.beginPath();
+            ctx.arc(-2, 30, 6, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(37, 30, 6, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Wheel rims
+            ctx.fillStyle = '#00d4ff';
+            ctx.beginPath();
+            ctx.arc(-2, 30, 3, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(37, 30, 3, 0, 2 * Math.PI);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawAINodes(ctx, centerX, centerY, radius, nodeCount = 6) {
+            const nodes = [];
+            for (let i = 0; i < nodeCount; i++) {
+                const angle = (i / nodeCount) * 2 * Math.PI;
+                nodes.push({
+                    x: centerX + Math.cos(angle) * radius,
+                    y: centerY + Math.sin(angle) * radius
+                });
+            }
+
+            // Draw connections
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.6;
+
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    ctx.beginPath();
+                    ctx.moveTo(nodes[i].x, nodes[i].y);
+                    ctx.lineTo(nodes[j].x, nodes[j].y);
+                    ctx.stroke();
+                }
+            }
+
+            // Draw nodes
+            ctx.fillStyle = '#00d4ff';
+            ctx.globalAlpha = 1;
+            nodes.forEach(node => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 4, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+        function addGlowEffect(ctx, text, x, y, fontSize, color = '#00d4ff') {
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillStyle = color;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 10;
+            ctx.fillText(text, x, y);
+            ctx.shadowBlur = 0;
+        }
+
+        // Screenshot Generator (1280x800)
+        function createScreenshot() {
+            const canvas = document.getElementById('screenshotCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = createGradientBackground(ctx, 1280, 800);
+            ctx.fillRect(0, 0, 1280, 800);
+
+            // Title
+            addGlowEffect(ctx, 'RELAY AI BOOKER', 640, 100, 48, '#ffffff');
+            addGlowEffect(ctx, 'AI-Powered Amazon Relay Load Monitoring', 640, 150, 24, '#00d4ff');
+
+            // Main truck illustration
+            drawTruck(ctx, 500, 250, 3);
+
+            // AI network
+            drawAINodes(ctx, 800, 350, 80, 8);
+
+            // Feature highlights
+            const features = [
+                '⚡ Real-time Load Monitoring',
+                '💰 Advanced Profit Calculator',
+                '🎯 Smart Detection Algorithms',
+                '🔧 Professional Controls',
+                '🎵 Instant Audio Notifications'
+            ];
+
+            ctx.font = 'bold 20px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'left';
+
+            features.forEach((feature, index) => {
+                ctx.fillText(feature, 100, 500 + (index * 40));
+            });
+
+            // Bottom tagline
+            addGlowEffect(ctx, 'Transform Your Amazon Relay Experience', 640, 750, 28, '#00d4ff');
+        }
+
+        // Small Promo Tile Generator (440x280)
+        function createSmallPromo() {
+            const canvas = document.getElementById('smallPromoCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = createGradientBackground(ctx, 440, 280);
+            ctx.fillRect(0, 0, 440, 280);
+
+            // Title
+            addGlowEffect(ctx, 'RELAY AI', 220, 60, 32, '#ffffff');
+            addGlowEffect(ctx, 'BOOKER', 220, 100, 32, '#00d4ff');
+
+            // Truck
+            drawTruck(ctx, 150, 140, 1.5);
+
+            // AI pattern
+            drawAINodes(ctx, 320, 180, 40, 6);
+
+            // Tagline
+            addGlowEffect(ctx, 'AI-Powered Load Monitoring', 220, 250, 16, '#ffffff');
+        }
+
+        // Marquee Promo Tile Generator (1400x560)
+        function createMarquee() {
+            const canvas = document.getElementById('marqueeCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = createGradientBackground(ctx, 1400, 560);
+            ctx.fillRect(0, 0, 1400, 560);
+
+            // Main title
+            addGlowEffect(ctx, 'RELAY AI BOOKER', 700, 120, 56, '#ffffff');
+            addGlowEffect(ctx, 'Professional Amazon Relay Load Board Enhancement', 700, 180, 28, '#00d4ff');
+
+            // Left side - Truck illustration
+            drawTruck(ctx, 200, 250, 2.5);
+
+            // Right side - AI network
+            drawAINodes(ctx, 1100, 300, 100, 10);
+
+            // Center features
+            const centerFeatures = [
+                '⚡ Real-Time Monitoring',
+                '💰 Profit Calculator',
+                '🎯 Smart Detection',
+                '🔧 Pro Controls'
+            ];
+
+            ctx.font = 'bold 18px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+
+            centerFeatures.forEach((feature, index) => {
+                const x = 500 + (index % 2) * 200;
+                const y = 350 + Math.floor(index / 2) * 40;
+                ctx.fillText(feature, x, y);
+            });
+
+            // Bottom call to action
+            addGlowEffect(ctx, '$50/month • Professional Tool for Serious Drivers', 700, 500, 24, '#ffa726');
+        }
+
+        // Download functions
+        function downloadScreenshot() {
+            const canvas = document.getElementById('screenshotCanvas');
+            const link = document.createElement('a');
+            link.download = 'relay-ai-booker-screenshot-1280x800.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        function downloadSmallPromo() {
+            const canvas = document.getElementById('smallPromoCanvas');
+            const link = document.createElement('a');
+            link.download = 'relay-ai-booker-small-promo-440x280.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        function downloadMarquee() {
+            const canvas = document.getElementById('marqueeCanvas');
+            const link = document.createElement('a');
+            link.download = 'relay-ai-booker-marquee-1400x560.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        function downloadAll() {
+            setTimeout(() => downloadScreenshot(), 100);
+            setTimeout(() => downloadSmallPromo(), 200);
+            setTimeout(() => downloadMarquee(), 300);
+        }
+
+        // Generate all images when page loads
+        window.onload = function () {
+            createScreenshot();
+            createSmallPromo();
+            createMarquee();
+        };
+    </script>
+</body>
+
+</html>

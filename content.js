@@ -1,6 +1,3 @@
-console.log("📦 content.js loaded");
-console.log("✅ content.js is running");
-
 // ExtPay Integration
 const extpay = ExtPay("relay-ai-booker");
 
@@ -14,6 +11,7 @@ let userPaymentStatus = null;
 
 const SETTINGS_KEY = "amazonRelayLoadDetectorSettings";
 let currentSettings = {};
+let panelWatchdog = null; // For the periodic panel check
 
 const defaultSettings = {
   baseDelay: 800,
@@ -49,13 +47,9 @@ function loadSettings() {
 }
 
 function clickRefreshButton() {
-  console.log("🔁 Clicking refresh button");
   const refreshBtn = document.querySelector("button.css-q7ppch");
   if (refreshBtn) {
-    console.log("🔁 Clicking refresh button");
     refreshBtn.click();
-  } else {
-    console.warn("⚠️ Refresh button not found.");
   }
 }
 
@@ -65,29 +59,10 @@ function injectModernStyles() {
   // but it should be empty.
 }
 
-// Payment Status Check Function
+// Temporarily force paid status for free access
 async function checkPaymentStatus() {
-  try {
-    const user = await extpay.getUser();
-    isPaidUser = user.paid && user.subscriptionStatus === "active";
-    userPaymentStatus = user.subscriptionStatus;
-    console.log(
-      "💳 Payment Status:",
-      isPaidUser ? "PAID" : "UNPAID",
-      `(${userPaymentStatus})`
-    );
-
-    // Store user data for subscription display in settings
-    if (isPaidUser) {
-      window.currentUserData = user;
-    }
-
-    return isPaidUser;
-  } catch (error) {
-    console.error("❌ ExtPay Error:", error);
-    isPaidUser = false;
-    return false;
-  }
+  isPaidUser = true;
+  return true;
 }
 
 // Update Subscription Status Display
@@ -135,8 +110,8 @@ function setupPaymentUI() {
   const paymentHTML = `
     <div id="amazon-relay-detector-payment-panel">
       <div class="arl-payment-hero">
-        <div class="arl-payment-icon">🚛</div>
-        <h2 class="arl-payment-title">Relay AI Booker Pro</h2>
+
+                            <h2 class="arl-payment-title">Smart Amazon Relay Refresher Pro</h2>
         <p class="arl-payment-subtitle">Professional Load Detection System</p>
       </div>
       
@@ -198,20 +173,20 @@ function setupPaymentUI() {
   const paymentStyles = `
     #amazon-relay-detector-payment-panel {
       position: relative;
-      margin-top: 12px;
+      margin-top: 16px;
       z-index: 999999;
       background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
       color: #ffffff;
       border: 1px solid #00d4ff;
-      border-radius: 16px;
-      padding: 24px;
+      border-radius: 20px;
+      padding: 32px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       box-shadow: 
         0 0 30px rgba(0, 212, 255, 0.3),
         0 10px 50px rgba(0, 0, 0, 0.5),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      min-width: 300px;
-      max-width: 400px;
+      min-width: 350px;
+      max-width: 450px;
       width: 100%;
       box-sizing: border-box;
       overflow: hidden;
@@ -235,27 +210,28 @@ function setupPaymentUI() {
 
     .arl-payment-hero {
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 32px;
     }
 
     .arl-payment-icon {
-      font-size: 48px;
-      margin-bottom: 12px;
+      font-size: 56px;
+      margin-bottom: 16px;
       filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.5));
     }
 
     .arl-payment-title {
-      font-size: 24px;
+      font-size: 28px;
       font-weight: 700;
-      margin: 0 0 8px 0;
+      margin: 0 0 12px 0;
       background: linear-gradient(135deg, #00d4ff, #0066ff);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      line-height: 1.2;
     }
 
     .arl-payment-subtitle {
-      font-size: 14px;
+      font-size: 16px;
       color: #a0a0a0;
       margin: 0;
     }
@@ -263,17 +239,17 @@ function setupPaymentUI() {
     .arl-value-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 24px;
+      gap: 20px;
+      margin-bottom: 32px;
     }
 
     .arl-value-item {
       display: flex;
       align-items: flex-start;
-      gap: 10px;
-      padding: 12px;
+      gap: 12px;
+      padding: 16px;
       background: rgba(255, 255, 255, 0.05);
-      border-radius: 10px;
+      border-radius: 12px;
       border: 1px solid rgba(0, 212, 255, 0.2);
       transition: all 0.3s ease;
     }
@@ -284,35 +260,37 @@ function setupPaymentUI() {
     }
 
     .arl-value-icon {
-      font-size: 20px;
+      font-size: 24px;
       flex-shrink: 0;
+      margin-top: 2px;
     }
 
     .arl-value-text h4 {
-      margin: 0 0 4px 0;
-      font-size: 13px;
+      margin: 0 0 6px 0;
+      font-size: 15px;
       font-weight: 600;
       color: #ffffff;
+      line-height: 1.2;
     }
 
     .arl-value-text p {
       margin: 0;
-      font-size: 11px;
+      font-size: 13px;
       color: #a0a0a0;
-      line-height: 1.3;
+      line-height: 1.4;
     }
 
     .arl-pricing-section {
       text-align: center;
-      margin: 24px 0;
-      padding: 20px;
+      margin: 32px 0;
+      padding: 24px;
       background: rgba(0, 212, 255, 0.1);
-      border-radius: 12px;
+      border-radius: 16px;
       border: 1px solid rgba(0, 212, 255, 0.3);
     }
 
     .arl-price-tag {
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
 
     .arl-price-main {
@@ -339,9 +317,10 @@ function setupPaymentUI() {
       align-items: center;
       justify-content: center;
       gap: 8px;
-      font-size: 12px;
+      font-size: 14px;
       color: #a0a0a0;
       font-style: italic;
+      margin-top: 4px;
     }
 
     .arl-roi-icon {
@@ -350,12 +329,12 @@ function setupPaymentUI() {
 
     .arl-upgrade-button {
       width: 100%;
-      padding: 16px 24px;
+      padding: 20px 24px;
       background: linear-gradient(135deg, #00d4ff 0%, #0066ff 100%);
       border: none;
-      border-radius: 12px;
+      border-radius: 16px;
       color: #ffffff;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 700;
       cursor: pointer;
       display: flex;
@@ -366,7 +345,7 @@ function setupPaymentUI() {
       box-shadow: 
         0 4px 15px rgba(0, 212, 255, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.2);
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
 
     .arl-upgrade-button:hover {
@@ -394,8 +373,8 @@ function setupPaymentUI() {
     }
 
     .arl-payment-footer p {
-      margin: 4px 0;
-      font-size: 12px;
+      margin: 6px 0;
+      font-size: 14px;
       color: #a0a0a0;
     }
 
@@ -421,7 +400,7 @@ function setupUI() {
   const controlPanelHTML = `
     <div id="amazon-relay-detector-panel">
       <div class="arl-header">
-        <span class="arl-title">Relay AI Booker</span>
+                        <span class="arl-title">Smart Amazon Relay Refresher</span>
         <div class="arl-header-controls">
           <div id="arl-status-container">
             <div id="arl-status-indicator"></div>
@@ -433,12 +412,12 @@ function setupUI() {
       
       <div class="arl-slider-group">
         <label for="arl-base-speed">Base Speed: <span id="arl-base-speed-value" class="arl-slider-value">800ms</span></label>
-        <input type="range" id="arl-base-speed" min="200" max="10000" step="100" value="800">
+        <input type="range" id="arl-base-speed" min="300" max="2000" step="100" value="800">
       </div>
       
       <div class="arl-slider-group">
         <label for="arl-randomizer">Randomizer: <span id="arl-randomizer-value" class="arl-slider-value">500ms</span></label>
-        <input type="range" id="arl-randomizer" min="0" max="5000" step="50" value="500">
+        <input type="range" id="arl-randomizer" min="0" max="2000" step="50" value="500">
       </div>
       
       <div class="arl-button-group">
@@ -570,6 +549,10 @@ function setupUI() {
         min-width: 200px;
         max-width: 300px;
         padding: 12px;
+        margin-left: auto;
+        margin-right: auto;
+        left: 50%;
+        transform: translateX(-50%);
       }
     }
     
@@ -578,6 +561,10 @@ function setupUI() {
         min-width: 180px;
         max-width: 250px;
         padding: 10px;
+        margin-left: auto;
+        margin-right: auto;
+        left: 50%;
+        transform: translateX(-50%);
       }
     }
     .arl-header { 
@@ -940,12 +927,17 @@ function setupUI() {
 
     /* --- Profit Badge --- */
     .arl-profit-badge {
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 600;
-      padding: 3px 8px;
+      padding: 3px 6px;
       border-radius: 6px;
       margin-top: 4px;
       text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      display: inline-block;
     }
     .arl-profit-badge.profit {
       color: #3fb950;
@@ -1110,7 +1102,7 @@ function setupUI() {
             !document.getElementById("amazon-relay-detector-panel") &&
             !document.getElementById("amazon-relay-detector-payment-panel")
           ) {
-            searchPanel.insertAdjacentHTML("beforeend", controlPanelHTML);
+            searchPanel.insertAdjacentHTML("afterend", controlPanelHTML);
             applySettingsToUI();
             attachListeners();
             // Show profit calculations initially since monitoring is not active
@@ -1137,14 +1129,86 @@ function setupUI() {
             !document.getElementById("amazon-relay-detector-payment-panel") &&
             !document.getElementById("amazon-relay-detector-panel")
           ) {
-            searchPanel.insertAdjacentHTML("beforeend", paymentHTML);
+            searchPanel.insertAdjacentHTML("afterend", paymentHTML);
             attachPaymentListeners();
           }
         }
         clearInterval(interval);
+        startPanelWatchdog(); // Start the watchdog after successful injection
       }
       if (attempts > 30) clearInterval(interval);
     }, 300);
+  }
+
+  // Watchdog function to ensure panel stays injected
+  function startPanelWatchdog() {
+    // Clear any existing watchdog
+    if (panelWatchdog) {
+      clearInterval(panelWatchdog);
+    }
+
+    panelWatchdog = setInterval(async () => {
+      // Check if either panel exists
+      const normalPanel = document.getElementById(
+        "amazon-relay-detector-panel"
+      );
+      const paymentPanel = document.getElementById(
+        "amazon-relay-detector-payment-panel"
+      );
+
+      if (!normalPanel && !paymentPanel) {
+        // Panel is missing, re-inject it
+        const searchPanel = document.querySelector(".search__panel");
+        if (searchPanel) {
+          const isPaid = await checkPaymentStatus();
+
+          if (isPaid) {
+            // Re-inject normal panel
+            searchPanel.insertAdjacentHTML("afterend", controlPanelHTML);
+            applySettingsToUI();
+            attachListeners();
+
+            // Re-inject priority lane if needed
+            const loadListContainer = document.querySelector('[role="list"]');
+            if (
+              loadListContainer &&
+              !document.getElementById("arl-priority-lane")
+            ) {
+              const priorityLaneHTML = `
+                <div id="arl-priority-lane">
+                  <h3 class="arl-priority-header">Newly Detected</h3>
+                </div>
+              `;
+              loadListContainer.insertAdjacentHTML(
+                "beforebegin",
+                priorityLaneHTML
+              );
+            }
+
+            // Show profit calculations if not monitoring
+            setTimeout(() => {
+              if (!isDetectionActive) {
+                showProfitCalculation();
+              }
+            }, 100);
+          } else {
+            // Re-inject payment panel
+            const { paymentHTML, paymentStyles } = setupPaymentUI();
+
+            // Re-inject payment styles if needed
+            if (!document.getElementById("arl-payment-styles")) {
+              const styleSheet = document.createElement("style");
+              styleSheet.id = "arl-payment-styles";
+              styleSheet.innerText = paymentStyles;
+              document.head.appendChild(styleSheet);
+            }
+
+            searchPanel.insertAdjacentHTML("afterend", paymentHTML);
+            attachPaymentListeners();
+          }
+        }
+      }
+    }, 1500); // Check every 1.5 seconds
   }
 
   function applySettingsToUI() {
@@ -1155,12 +1219,23 @@ function setupUI() {
     randomDelay = currentSettings.randomDelay;
 
     // Apply to UI elements
-    document.getElementById("arl-base-speed").value = baseDelay;
+    const baseSpeedSlider = document.getElementById("arl-base-speed");
+    const randomizerSlider = document.getElementById("arl-randomizer");
+
+    if (baseSpeedSlider) {
+      baseSpeedSlider.setAttribute("min", "300");
+      baseSpeedSlider.setAttribute("max", "2000");
+      baseSpeedSlider.value = baseDelay;
+    }
     document.getElementById(
       "arl-base-speed-value"
     ).textContent = `${baseDelay}ms`;
 
-    document.getElementById("arl-randomizer").value = randomDelay;
+    if (randomizerSlider) {
+      randomizerSlider.setAttribute("min", "0");
+      randomizerSlider.setAttribute("max", "2000");
+      randomizerSlider.value = randomDelay;
+    }
     document.getElementById(
       "arl-randomizer-value"
     ).textContent = `${randomDelay}ms`;
@@ -1228,7 +1303,6 @@ function setupUI() {
 
     startBtn.addEventListener("click", () => {
       if (!isPaidUser) {
-        console.log("🚫 Start blocked - payment required");
         return;
       }
       if (isDetectionActive) return;
@@ -1244,7 +1318,6 @@ function setupUI() {
 
     stopBtn.addEventListener("click", () => {
       if (!isPaidUser) {
-        console.log("🚫 Stop blocked - payment required");
         return;
       }
       stopMonitoring("Stopped ");
@@ -1258,8 +1331,18 @@ function setupUI() {
 
       // Refresh subscription status when opening settings
       if (isHidden && isPaidUser) {
-        const user = await extpay.getUser();
-        updateSubscriptionDisplay(user);
+        // --- TEMPORARILY FREE MODE ---
+        const mockUser = {
+          paid: true,
+          subscriptionStatus: "active",
+          paidAt: new Date().toISOString(),
+          subscriptionCancelAt: null,
+        };
+        updateSubscriptionDisplay(mockUser);
+
+        // --- ORIGINAL CODE ---
+        // const user = await extpay.getUser();
+        // updateSubscriptionDisplay(user);
       }
     });
 
@@ -1343,11 +1426,9 @@ function setupUI() {
     if (manageSubBtn) {
       manageSubBtn.addEventListener("click", () => {
         if (!isPaidUser) return;
-        console.log("💳 Opening subscription management from settings...");
         try {
           extpay.openPaymentPage();
         } catch (error) {
-          console.error("❌ Subscription management error:", error);
           alert("Unable to open subscription management. Please try again.");
         }
       });
@@ -1359,11 +1440,9 @@ function setupUI() {
     const upgradeBtn = document.getElementById("arl-upgrade-btn");
     if (upgradeBtn) {
       upgradeBtn.addEventListener("click", () => {
-        console.log("💳 Opening payment page...");
         try {
           extpay.openPaymentPage();
         } catch (error) {
-          console.error("❌ Payment page error:", error);
           alert(
             "Unable to open payment page. Please try again or contact support."
           );
@@ -1373,12 +1452,18 @@ function setupUI() {
   }
 
   waitAndInjectPanel();
+
+  // Cleanup watchdog when page unloads
+  window.addEventListener("beforeunload", () => {
+    if (panelWatchdog) {
+      clearInterval(panelWatchdog);
+    }
+  });
 }
 
 // ExtPay Payment Callback
 try {
   extpay.onPaid.addListener((user) => {
-    console.log("🎉 User paid! Refreshing interface...");
     isPaidUser = true;
 
     // Remove payment panel and inject normal UI
@@ -1394,9 +1479,7 @@ try {
       location.reload();
     }, 1000);
   });
-} catch (error) {
-  console.error("❌ ExtPay onPaid callback error:", error);
-}
+} catch (error) {}
 
 setupUI();
 
@@ -1478,7 +1561,6 @@ function stopMonitoring(message = "Stopped") {
   if (stopBtn) stopBtn.disabled = true;
 
   clearTimeout(detectionTimeout);
-  console.log(` Detection stopped. Reason: ${message}`);
 
   // Show profit calculation when monitoring stops
   showProfitCalculation();
@@ -1528,10 +1610,8 @@ function parsePrice(priceString) {
 
 function startMonitoring() {
   if (!isPaidUser) {
-    console.log("🚫 Monitoring blocked - payment required");
     return;
   }
-  console.log("👀 Starting monitoring...");
 
   const seenLoadDetails = new Map(); // Upgraded to a Map
   const searchRoot = document.getElementById("active-tab-body");
@@ -1547,16 +1627,10 @@ function startMonitoring() {
         seenLoadDetails.set(id, price);
       }
     });
-  } else {
-    // If we can't find the container, start anyway.
-    console.log(
-      "ℹ️ No load container found. Starting monitoring with empty list."
-    );
   }
 
   function detectionCycle() {
     if (!isDetectionActive) {
-      console.log("🛑 Detection stopped. Exiting cycle.");
       return;
     }
 
@@ -1565,9 +1639,6 @@ function startMonitoring() {
     detectionTimeout = setTimeout(() => {
       const searchRoot = document.getElementById("active-tab-body");
       if (!searchRoot) {
-        console.log(
-          "ℹ️ No load container found after refresh. Continuing loop."
-        );
         const totalDelay = baseDelay + Math.floor(Math.random() * randomDelay);
         detectionTimeout = setTimeout(detectionCycle, totalDelay);
         return;
@@ -1611,11 +1682,6 @@ function startMonitoring() {
           if (!isBlacklisted) {
             // This is a brand new, non-blacklisted load
             newOrUpdatedLoads.push({ id, card, type: "new" });
-          } else {
-            console.log(
-              `ARL: Ignoring new load ${id} because it is blacklisted.`
-            );
-            // Silently ignore, it will be added to seenLoadDetails at the end of the cycle.
           }
         } else if (price && storedPrice !== price) {
           // This is a price update
@@ -1643,10 +1709,7 @@ function startMonitoring() {
       // --- Profit calculation is moved to showProfitCalculation() function ---
       // This will only be shown when monitoring is stopped
 
-      console.log("🆕 New or Updated Loads:", newOrUpdatedLoads);
-
       if (newOrUpdatedLoads.length > 0) {
-        console.log("🎉 Changes detected! Stopping detection.");
         playSound();
 
         const priorityLane = document.getElementById("arl-priority-lane");
@@ -1677,7 +1740,6 @@ function startMonitoring() {
               fastBookBtn.className = "arl-inline-fast-book-btn";
               fastBookBtn.textContent = "Fast Book";
               fastBookBtn.addEventListener("click", (e) => {
-                console.log(`booking load with load id of ${load.id}`);
                 e.stopPropagation();
 
                 // Click the first child of the load card to open details
@@ -1687,10 +1749,6 @@ function startMonitoring() {
                   // Call the new helper function to wait for and click the book button
                   waitForAndClickBookButton();
                 } else {
-                  console.warn(
-                    "ARL: Could not find the specific child element, falling back to clicking the card.",
-                    load.id
-                  );
                   load.card.click(); // Fallback
                 }
               });
@@ -1712,11 +1770,6 @@ function startMonitoring() {
                 if (mobilePriceContainer) {
                   // On mobile, prepend the button to the container that holds the price and the arrow.
                   mobilePriceContainer.prepend(fastBookBtn);
-                } else {
-                  console.warn(
-                    "⚠️ ARL: Could not find a suitable location for the Fast Book button.",
-                    load.id
-                  );
                 }
               }
             }
@@ -1744,7 +1797,6 @@ function startMonitoring() {
         }
         stopMonitoring("Changes detected");
       } else {
-        console.log("✅ No changes found. Continuing loop.");
         // Update the master list for the next cycle
         seenLoadDetails.clear();
         currentLoadDetails.forEach((price, id) =>
@@ -1767,7 +1819,6 @@ function waitForAndClickBookButton() {
     const bookButton = document.querySelector("button#rlb-book-btn");
 
     if (bookButton) {
-      console.log("ARL: Found 'Book' button. Clicking it now.");
       bookButton.click();
       clearInterval(interval); // Stop searching once found and clicked
       waitForAndClickConfirmButton();
@@ -1776,7 +1827,6 @@ function waitForAndClickBookButton() {
 
     attempts++;
     if (attempts > maxAttempts) {
-      console.warn("ARL: Timed out waiting for the 'Book' button to appear.");
       clearInterval(interval);
     }
   }, 100);
@@ -1792,9 +1842,6 @@ function waitForAndClickConfirmButton() {
     );
 
     if (confirmButton) {
-      console.log(
-        "ARL: Found final confirmation button. Clicking to confirm booking."
-      );
       confirmButton.click();
       clearInterval(interval); // Final step, stop searching
       return;
@@ -1802,7 +1849,6 @@ function waitForAndClickConfirmButton() {
 
     attempts++;
     if (attempts > maxAttempts) {
-      console.warn("ARL: Timed out waiting for the final confirmation button.");
       clearInterval(interval);
     }
   }, 100);
@@ -1810,5 +1856,5 @@ function waitForAndClickConfirmButton() {
 
 function playSound() {
   const audio = new Audio(chrome.runtime.getURL("cash.mp3"));
-  audio.play().catch((e) => console.warn("🔇 Failed to play sound:", e));
+  audio.play().catch((e) => {});
 }
