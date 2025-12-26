@@ -219,13 +219,24 @@ const ElementFinder = {
     }
 
     // Get all potential load cards
-    const allCards = Array.from(
+    const allMatches = Array.from(
       searchRoot.querySelectorAll('.load-card, .wo-card-header--highlighted, div[id]:has(.wo-total_payout)')
     );
-    this.log('findLoadCards', `Found ${allCards.length} total cards before filtering`);
+    this.log('findLoadCards', `Found ${allMatches.length} total matches before deduplication`);
+
+    // Deduplicate: filter out elements that are children of other matched elements
+    // This prevents counting nested matches as separate cards
+    const uniqueCards = allMatches.filter(card => {
+      // Check if any other matched element is an ancestor of this one
+      const isNestedInAnotherMatch = allMatches.some(otherCard =>
+        otherCard !== card && otherCard.contains(card)
+      );
+      return !isNestedInAnotherMatch;
+    });
+    this.log('findLoadCards', `After deduplication: ${uniqueCards.length} unique cards`);
 
     // Filter out cards in the "Similar matches" section
-    const filteredCards = allCards.filter(card => !this.isInSimilarMatchesSection(card));
+    const filteredCards = uniqueCards.filter(card => !this.isInSimilarMatchesSection(card));
     this.log('findLoadCards', `After filtering Similar matches: ${filteredCards.length} cards`);
 
     return filteredCards;

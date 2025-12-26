@@ -1619,10 +1619,12 @@ function startMonitoring() {
             "new-load-highlight",
             "price-update-highlight"
           );
-          const existingHighlightBadge = load.card.querySelector(
-            ".new-load-badge, .price-update-badge"
+
+          // Remove ALL existing badges (ours and Amazon's) to prevent duplicates
+          const existingBadges = load.card.querySelectorAll(
+            ".new-load-badge, .price-update-badge, .wo-tag"
           );
-          if (existingHighlightBadge) existingHighlightBadge.remove();
+          existingBadges.forEach(badge => badge.remove());
 
           const badge = document.createElement("div");
 
@@ -1681,9 +1683,6 @@ function startMonitoring() {
           }
 
           load.card.appendChild(badge);
-
-          const woTagElement = load.card.querySelector(".wo-tag");
-          if (woTagElement) woTagElement.remove();
 
           if (priorityLane) {
             priorityLane.prepend(load.card);
